@@ -18,37 +18,13 @@ from qtpy.QtWidgets import (
     QApplication,
     QStylePainter,
     QStyleOptionTab,
+    QStyleOption,
     QStyle,
-    QProxyStyle,
 )
 
 
 # 기본 제공 GIF 아이콘이 있는 디렉토리 (패키지 내 assets/)
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-
-
-class _TabButtonOffsetStyle(QProxyStyle):
-    """탭의 좌/우 버튼(닫기 버튼 등) 위치를 지정한 만큼 이동시키는 프록시 스타일.
-
-    QTabBar 는 닫기 버튼을 스타일의 SE_TabBarTabRightButton/LeftButton 위치에
-    배치하므로, 그 사각형을 오프셋해 버튼 위치를 미세 조정한다.
-    """
-
-    def __init__(self, dx=0, dy=0, base_style=None):
-        super().__init__(base_style)
-        self._dx = dx
-        self._dy = dy
-
-    def setOffset(self, dx, dy):
-        self._dx = dx
-        self._dy = dy
-
-    def subElementRect(self, element, option, widget=None):
-        rect = super().subElementRect(element, option, widget)
-        if element in (QStyle.SE_TabBarTabRightButton,
-                       QStyle.SE_TabBarTabLeftButton):
-            rect = rect.translated(self._dx, self._dy)
-        return rect
 
 
 def _event_pos(event):
@@ -79,6 +55,8 @@ class GroupTabBar(QTabBar):
     _ICON_TEXT_GAP = 5      # 아이콘과 텍스트 사이 간격(px)
     _TEXT_PAD = 6           # 글자 잘림(생략) 방지용 여유 폭(px)
     _TEXT_VOFFSET = -1      # 글꼴 비대칭 보정: 텍스트를 살짝 위로(px)
+    _CLOSE_SIZE = 16        # 닫기 X 영역 크기(px)
+    _CLOSE_MARGIN = 4       # 탭 우측 가장자리와 X 사이 여백(px)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -104,7 +82,13 @@ class GroupTabBar(QTabBar):
         # 애니메이션이 필요 없고, 원격 X 환경에서도 부드럽다.
         self._drag_offset = 0
         self._drag_anchor = 0   # 그룹 좌측에서 커서를 잡은 위치
-        self._hidden_close_btns = []  # 드래그 중 숨긴 (잡은 그룹 외) 닫기 버튼
+
+        # 닫기 버튼: 자식 위젯이 아니라 paintEvent 에서 직접 그린다.
+        # (자식 위젯은 항상 부모 paint 위에 그려져, 드래그로 그룹을 띄울 때
+        #  깔리는 탭의 X 가 위로 뚫고 나오는 z-order 충돌이 생긴다.)
+        self._closable = False
+        self._close_press_index = -1   # 닫기 X 를 누른 탭
+        self._close_hover_index = -1   # 닫기 X 위에 커서가 있는 탭
 
         # 그룹 전환 상태
         self._current_group = None
@@ -114,15 +98,11 @@ class GroupTabBar(QTabBar):
         # 애니메이션(GIF) 아이콘: uid -> QMovie
         self._movies = {}
 
-        # 닫기 버튼 위치 미세 조정 (오른쪽 3px, 위로 1px)
-        self._btn_style = _TabButtonOffsetStyle(3, -1)
-        self.setStyle(self._btn_style)
-
         # 드래그는 전부 우리가 직접(커서 추적) 처리하므로 네이티브 이동은 끈다.
-        # (켜두면 일부 환경에서 네이티브 단일탭 드래그가 끼어들어, 탭은 고정인데
-        #  닫기 버튼만 움직이는 충돌이 생길 수 있다.)
         self.setMovable(False)
         self.setDrawBase(False)
+        # 닫기 X hover 효과를 위해 마우스 추적을 켠다.
+        self.setMouseTracking(True)
 
     # ------------------------------------------------------------------ #
     # 공개 API
@@ -319,22 +299,29 @@ class GroupTabBar(QTabBar):
         self.setTabMovie(index, os.path.join(_ASSET_DIR, "gear.gif"))
 
     def setTabsClosable(self, closable):
-        """닫기 버튼 표시를 켜고 끈다. (켜고 끈 뒤 탭 폭을 다시 맞춘다)"""
-        super().setTabsClosable(closable)
+        """닫기 버튼(X) 표시를 켜고 끈다.
+
+        네이티브 자식 위젯 버튼을 만들지 않고, paintEvent 에서 직접 X 를
+        그린다(드래그 시 z-order 충돌 방지). super 는 호출하지 않는다.
+        """
+        closable = bool(closable)
+        if closable == self._closable:
+            return
+        self._closable = closable
         self.relayoutTabs()
+        self.update()
+
+    def tabsClosable(self):
+        """닫기 버튼(X) 표시 여부."""
+        return self._closable
 
     def relayoutTabs(self):
         """QTabBar 의 탭 레이아웃을 강제로 다시 계산하게 한다.
 
-        닫기 버튼을 끈 뒤에도 QTabBar 가 캐시된 탭 폭을 그대로 두는 경우가
-        있어, 같은 elideMode 를 재설정해 tabSizeHint 를 다시 반영시킨다.
+        닫기 표시를 켜고 끌 때 tabSizeHint(폭)가 즉시 반영되도록, 같은
+        elideMode 를 재설정해 레이아웃을 다시 계산시킨다.
         """
         self.setElideMode(self.elideMode())
-
-    def setCloseButtonOffset(self, dx, dy):
-        """닫기 버튼 위치를 (dx, dy)px 만큼 이동한다."""
-        self._btn_style.setOffset(dx, dy)
-        self.relayoutTabs()
 
     def setTopAccentEnabled(self, enabled):
         """선택된 그룹 탭 윗부분의 액센트 바 표시 여부를 설정한다."""
@@ -375,17 +362,18 @@ class GroupTabBar(QTabBar):
         f.setBold(True)
         return f
 
-    def _close_indicator(self):
-        """닫기 버튼이 차지할 (예약 폭, 왼쪽에 있는지) 를 반환한다.
+    def _close_reserve(self):
+        """닫기 X 가 라벨 오른쪽에서 차지할 폭(px). (닫기 꺼져 있으면 0)"""
+        if not self._closable:
+            return 0
+        return self._CLOSE_SIZE + self._ICON_TEXT_GAP
 
-        tabsClosable 가 아니면 (0, False).
-        """
-        if not self.tabsClosable():
-            return 0, False
-        w = self.style().pixelMetric(QStyle.PM_TabCloseIndicatorWidth, None, self)
-        # SH_TabBar_CloseButtonPosition: LeftSide=0, RightSide=1 (정수 반환)
-        side = self.style().styleHint(QStyle.SH_TabBar_CloseButtonPosition, None, self)
-        return w + self._ICON_TEXT_GAP, (side == 0)
+    def _close_rect(self, rect):
+        """탭의 (시각적) 사각형 안에서 닫기 X 가 그려질 영역."""
+        s = self._CLOSE_SIZE
+        x = rect.right() - self._CLOSE_MARGIN - s + 1
+        y = rect.center().y() - s // 2
+        return QRect(x, y, s, s)
 
     def _draw_rect(self, index):
         """탭을 그릴 기준 사각형."""
@@ -435,62 +423,6 @@ class GroupTabBar(QTabBar):
         self._reorder_to_uids(desired)
         self.groupMoved.emit(group, old_index, target_order_index)
 
-    def _tab_close_button(self, index):
-        """해당 탭의 닫기 버튼 위젯을 반환한다. (좌/우 어느 쪽이든, 없으면 None)"""
-        for side in (QTabBar.RightSide, QTabBar.LeftSide):
-            btn = self.tabButton(index, side)
-            if btn is not None:
-                return btn
-        return None
-
-    def _hide_other_close_buttons(self):
-        """드래그 중, 잡은 그룹을 제외한 다른 그룹들의 닫기 버튼을 숨긴다.
-
-        닫기 버튼은 자식 위젯이라 항상 부모 paint 위에 그려진다. 떠 있는 그룹
-        아래로 깔리는 다른 그룹의 X 가 위로 뚫고 나오는 오버랩을 막기 위해
-        잠시 숨기고, 놓을 때 복원한다.
-        """
-        self._hidden_close_btns = []
-        if not self.tabsClosable():
-            return
-        for i in range(self.count()):
-            if self.tabGroup(i) == self._drag_group:
-                continue
-            btn = self._tab_close_button(i)
-            if btn is not None and btn.isVisible():
-                btn.hide()
-                self._hidden_close_btns.append(btn)
-
-    def _restore_close_buttons(self):
-        for btn in self._hidden_close_btns:
-            try:
-                btn.show()
-            except RuntimeError:   # 탭이 그 사이 제거된 경우
-                pass
-        self._hidden_close_btns = []
-
-    def _follow_drag_close_buttons(self):
-        """드래그 중 잡은 그룹의 닫기 버튼이 탭과 함께 움직이게 위치를 옮긴다.
-
-        닫기 버튼은 자식 위젯이라 우리가 그리는 탭 오프셋을 따라오지 않으므로,
-        스타일이 정한 기본 위치에 드래그 오프셋을 더해 직접 이동시킨다.
-        놓을 때 relayoutTabs() 로 원위치로 복원된다.
-        """
-        if not self.tabsClosable():
-            return
-        on_left = self._close_indicator()[1]
-        elem = (QStyle.SE_TabBarTabLeftButton if on_left
-                else QStyle.SE_TabBarTabRightButton)
-        for i in self.groupTabIndices(self._drag_group):
-            btn = self._tab_close_button(i)
-            if btn is None:
-                continue
-            opt = QStyleOptionTab()
-            self.initStyleOption(opt, i)
-            opt.rect = self._draw_rect(i)   # 오프셋 미포함 기본 위치
-            r = self.style().subElementRect(elem, opt, self)
-            btn.move(r.x() + self._drag_offset, r.y())
-
     def _drag_target_index(self):
         """잡은 그룹의 현재 시각 중심 x 기준으로 목표 순서 인덱스를 구한다."""
         center_x = self._group_rect(self._drag_group).center().x() + self._drag_offset
@@ -520,8 +452,8 @@ class GroupTabBar(QTabBar):
             tw = fm.width(text)
         iw = self.iconSize().width() if not self.tabIcon(index).isNull() else 0
         gap = self._ICON_TEXT_GAP if iw else 0
-        # 닫기 버튼이 켜져 있으면 그만큼 폭을 더 확보한다.
-        reserve, _ = self._close_indicator()
+        # 닫기 X 가 켜져 있으면 그만큼 폭을 더 확보한다.
+        reserve = self._close_reserve()
         # 글자 폭에 약간의 여유(_TEXT_PAD)를 둬서 폰트/DPI 차이로 마지막
         # 글자가 잘려 '...' 로 생략되는 것을 막는다.
         size.setWidth(iw + gap + tw + self._TEXT_PAD + 2 * self._LABEL_HMARGIN + reserve)
@@ -537,12 +469,27 @@ class GroupTabBar(QTabBar):
     # ------------------------------------------------------------------ #
     # 마우스 이벤트 (그룹 단위 드래그 이동)
     # ------------------------------------------------------------------ #
+    def _close_index_at(self, pos):
+        """pos 가 어느 탭의 닫기 X 영역 안이면 그 탭 인덱스를, 아니면 -1."""
+        if not self._closable:
+            return -1
+        idx = self.tabAt(pos)
+        if idx != -1 and self._close_rect(self._draw_rect(idx)).contains(pos):
+            return idx
+        return -1
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            idx = self.tabAt(_event_pos(event))
+            pos = _event_pos(event)
+            # 닫기 X 를 눌렀으면 드래그/선택을 시작하지 않는다.
+            ci = self._close_index_at(pos)
+            if ci != -1:
+                self._close_press_index = ci
+                return
+            idx = self.tabAt(pos)
             if idx != -1:
                 self._drag_group = self.tabGroup(idx)
-                self._press_pos = _event_pos(event)
+                self._press_pos = pos
                 self._drag_active = False
         super().mousePressEvent(event)
 
@@ -554,8 +501,6 @@ class GroupTabBar(QTabBar):
                     self._drag_active = True
                     # 그룹 좌측에서 커서를 잡은 위치를 기억한다.
                     self._drag_anchor = self._press_pos.x() - self._group_rect(self._drag_group).left()
-                    # 떠 있는 그룹에 깔리는 다른 그룹 X 의 오버랩을 막는다.
-                    self._hide_other_close_buttons()
             if self._drag_active:
                 # 잡은 그룹이 커서를 1:1 로 따라오도록 오프셋을 갱신한다.
                 base_left = self._group_rect(self._drag_group).left()
@@ -568,16 +513,27 @@ class GroupTabBar(QTabBar):
                     # 재정렬로 기준 위치가 바뀌었으니 오프셋을 다시 계산(점프 방지)
                     base_left = self._group_rect(self._drag_group).left()
                     self._drag_offset = pos.x() - self._drag_anchor - base_left
-                # 닫기 버튼(자식 위젯)도 탭과 함께 움직이게 한다.
-                self._follow_drag_close_buttons()
                 self.update()
             # 그룹 드래그를 전담하므로, 네이티브 단일 탭 드래그가 시작되지
             # 않도록 super 로 넘기지 않는다.
             return
+        # 드래그가 아니면 닫기 X hover 상태를 갱신한다.
+        if self._closable:
+            hover = self._close_index_at(_event_pos(event))
+            if hover != self._close_hover_index:
+                self._close_hover_index = hover
+                self.update()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        was_dragging = self._drag_active
+        # 닫기 X 클릭 처리: 누른 곳에서 떼면 tabCloseRequested 방출.
+        if self._close_press_index != -1:
+            idx = self._close_press_index
+            self._close_press_index = -1
+            if (idx < self.count()
+                    and self._close_rect(self._draw_rect(idx)).contains(_event_pos(event))):
+                self.tabCloseRequested.emit(idx)
+            return
         self._drag_group = None
         self._drag_active = False
         self._press_pos = None
@@ -585,11 +541,13 @@ class GroupTabBar(QTabBar):
             # 잡은 그룹은 이미 올바른 슬롯에 있으므로, 오프셋만 0 으로 되돌린다.
             self._drag_offset = 0
             self.update()
-        self._restore_close_buttons()   # 숨겼던 다른 그룹 X 복원
-        if was_dragging and self.tabsClosable():
-            # 드래그 중 옮겼던 닫기 버튼들을 스타일 기본 위치로 복원한다.
-            self.relayoutTabs()
         super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        if self._close_hover_index != -1:
+            self._close_hover_index = -1
+            self.update()
+        super().leaveEvent(event)
 
     # ------------------------------------------------------------------ #
     # 그리기 (탭을 직접 그려서 선택 그룹 강조/애니메이션을 구현한다)
@@ -616,11 +574,10 @@ class GroupTabBar(QTabBar):
         ih = isize.height() if has_icon else 0
         gap = self._ICON_TEXT_GAP if has_icon else 0
 
-        # 닫기 버튼 영역을 제외한 부분에 아이콘+텍스트를 배치한다.
-        reserve, on_left = self._close_indicator()
+        # 닫기 X 영역(오른쪽)을 제외한 부분에 아이콘+텍스트를 배치한다.
+        reserve = self._close_reserve()
         if reserve:
-            rect = rect.adjusted(reserve, 0, 0, 0) if on_left \
-                else rect.adjusted(0, 0, -reserve, 0)
+            rect = rect.adjusted(0, 0, -reserve, 0)
 
         fm = QFontMetrics(font)
         avail = rect.width() - iw - gap - 2 * self._LABEL_HMARGIN
@@ -653,6 +610,17 @@ class GroupTabBar(QTabBar):
         painter.drawText(QRect(x, rect.top() + self._TEXT_VOFFSET, tw + 1, rect.height()),
                          Qt.AlignLeft | Qt.AlignVCenter, elided)
         painter.restore()
+
+    def _draw_close_button(self, painter, rect, index):
+        """탭의 닫기 X 를 직접 그린다. (자식 위젯 미사용)"""
+        opt = QStyleOption()
+        opt.initFrom(self)
+        opt.rect = self._close_rect(rect)
+        if index == self._close_hover_index:
+            opt.state |= QStyle.State_MouseOver | QStyle.State_Raised
+        if not self.isTabEnabled(index):
+            opt.state &= ~QStyle.State_Enabled
+        painter.drawPrimitive(QStyle.PE_IndicatorTabClose, opt)
 
     def paintEvent(self, event):
         painter = QStylePainter(self)
@@ -704,6 +672,10 @@ class GroupTabBar(QTabBar):
             label_rect = rect if i == selected else rect.adjusted(0, shift, 0, 0)
             font = bold_font if in_sel_group else normal_font
             self._draw_tab_label(painter, label_rect, i, font, i == selected)
+
+            # 닫기 X 를 (자식 위젯이 아니라) 직접 그린다 → z-order 충돌 없음.
+            if self._closable:
+                self._draw_close_button(painter, label_rect, i)
 
         # 3) 선택된 그룹의 탭들 윗부분에 액센트 바를 그린다. (옵션)
         if self._top_accent and sel_group is not None:

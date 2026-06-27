@@ -172,9 +172,11 @@ tabbar.addGroupTab("Tab4", 1)   # 결과 순서: Tab1, Tab2, Tab4, Tab3
   넘으면 `moveTab()` 으로 순서를 바꿉니다.
 - 탭을 직접 그리므로, `paintEvent` 시작에서 배경을 지워 이동 후 잔상이
   남지 않게 합니다.
-- `setTabsClosable(True)` 일 때 닫기 버튼 폭(`PM_TabCloseIndicatorWidth`)만큼
-  `tabSizeHint` 에 공간을 더하고, 라벨은 그 영역을 제외하고 그려 겹침을
-  방지합니다.
+- 닫기 버튼(X)은 **자식 위젯이 아니라 `paintEvent` 에서 직접 그립니다**
+  (`PE_IndicatorTabClose`). 자식 위젯은 항상 부모 paint 위에 그려져, 드래그로
+  그룹을 띄울 때 깔리는 탭의 X 가 위로 뚫고 나오는 z-order 충돌이 생기는데,
+  직접 그리면 X 가 탭과 같은 레이어라 paint 순서대로 자연스럽게 정렬됩니다.
+  클릭은 마우스 이벤트로 직접 판정해 `tabCloseRequested` 를 방출합니다.
 - 선택된 탭이 속한 그룹의 탭들은 원래 QTabBar 의 선택 탭처럼 위로 올라오며,
   바 높이를 `_group_raise`(기본 3px)만큼 키워 위쪽 여백을 확보하고 일반 탭은
   그만큼 내려 그려서, 선택 그룹이 좀 더 또렷하게 올라오게 합니다.

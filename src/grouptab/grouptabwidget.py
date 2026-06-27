@@ -33,6 +33,9 @@ class GroupTabWidget(QTabWidget):
         # 그룹 관련 시그널을 그대로 노출한다.
         self.groupMoved = self._bar.groupMoved
         self.currentGroupChanged = self._bar.currentGroupChanged
+        # 닫기 X 는 우리가 직접 그리므로, 바의 tabCloseRequested 를
+        # QTabWidget 의 동일 시그널로 직접 포워딩한다.
+        self._bar.tabCloseRequested.connect(self.tabCloseRequested)
 
     # ------------------------------------------------------------------ #
     # 공개 API
@@ -42,13 +45,12 @@ class GroupTabWidget(QTabWidget):
         return self._bar
 
     def setTabsClosable(self, closable):
-        """닫기 버튼 표시를 켜고 끈다.
+        """닫기 X 표시를 켜고 끈다.
 
-        QTabWidget.setTabsClosable 은 C++ 에서 탭 바의 setTabsClosable 을
-        비가상으로 호출하므로, 여기서 직접 탭 레이아웃을 다시 맞춘다.
+        네이티브 자식 위젯 버튼을 만들지 않도록 QTabWidget.setTabsClosable
+        (super)은 호출하지 않고, 직접 그리는 바의 설정만 켠다.
         """
-        super().setTabsClosable(closable)
-        self._bar.relayoutTabs()
+        self._bar.setTabsClosable(closable)
 
     def addGroupTab(self, widget, label, group, icon=None):
         """주어진 그룹의 마지막 순서에 (위젯, 라벨) 탭을 추가한다.
