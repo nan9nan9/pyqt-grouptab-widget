@@ -15,8 +15,8 @@
 - ✅ 탭 아이콘 지원: **이미지 / 색 점 / 기본 제공 Loading·Gear / 사용자 GIF**
 - ✅ **닫기 버튼**(`setTabsClosable(True)`) 지원 — 라벨과 겹치지 않게 공간 자동 확보
 - ✅ 그룹에 탭 추가 시 해당 그룹 블록의 **마지막 순서**에 삽입
-- ✅ 드래그 시 그룹이 **블록 단위로 함께 이동** + **슬라이드 애니메이션**
-  (`GroupTabWidget` 은 페이지도 함께 이동)
+- ✅ 드래그 시 그룹이 **블록 단위로 함께 이동** — 잡은 그룹이 네이티브
+  탭처럼 **커서를 실시간으로 따라옵니다** (`GroupTabWidget` 은 페이지도 함께 이동)
 - ✅ 탭을 선택하면 **선택된 그룹의 탭 전체가 살짝 올라오고 글씨가 굵게(Bold)** 표시
 - ✅ 선택된 그룹 탭 **윗부분에 액센트 바**(굵은 색 표시) — `setTopAccentEnabled(bool)` 로 on/off
 
@@ -134,12 +134,11 @@ tabbar.addGroupTab("Tab4", 1)   # 결과 순서: Tab1, Tab2, Tab4, Tab3
 | `setTopAccentEnabled(bool)` / `topAccentEnabled()` | 상단 액센트 바 on/off (기본 on) |
 | `setTopAccentColor(color)` | 액센트 바 색상 (None 이면 팔레트 highlight) |
 | `setTabsClosable(bool)` | 닫기 버튼 표시 on/off |
-| `setMoveAnimationEnabled(bool)` / `moveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
 | (그 외) | `QTabWidget` 의 모든 메서드 사용 가능 |
 
-> **원격 X 환경(Exceed TurboX / VNC / SSH X11) 팁**: 매 프레임 화면 전송이
-> 느린 원격 디스플레이에서는 이동 애니메이션이 끊기거나 잔상이 남을 수 있습니다.
-> 이때 `tabs.setMoveAnimationEnabled(False)` 로 끄면 즉시 이동해 깔끔합니다.
+> **원격 X 환경(Exceed TurboX / VNC / SSH X11)**: 드래그 이동은 네이티브
+> 탭처럼 커서를 실시간으로 따라가는 방식이라(타이머 애니메이션 없음), 원격
+> 디스플레이에서도 끊김 없이 부드럽게 동작합니다.
 
 ### GroupTabBar
 
@@ -166,15 +165,15 @@ tabbar.addGroupTab("Tab4", 1)   # 결과 순서: Tab1, Tab2, Tab4, Tab3
 
 - 각 탭의 그룹 정보는 `setTabData()` 로 저장되어 이동/삽입 시에도 따라다닙니다.
 - 같은 그룹의 탭은 항상 인접(연속)하도록 유지되어 하나의 블록을 이룹니다.
-- 단일 탭의 네이티브 드래그는 마우스 이벤트에서 가로채 막고, 대신
-  `moveTab()` 으로 그룹 전체를 함께 옮깁니다.
+- 단일 탭의 네이티브 드래그는 마우스 이벤트에서 가로채 막고, 드래그 중에는
+  잡은 그룹의 탭들을 커서 위치만큼 가로로 오프셋하여 그려(네이티브 탭처럼
+  커서를 1:1 로 따라옴), 다른 그룹의 중심을 넘으면 `moveTab()` 으로 순서를
+  바꿉니다. 타이머 애니메이션이 없어 원격 X 에서도 부드럽습니다.
 - 탭을 직접 그리므로, `paintEvent` 시작에서 배경을 지워 이동 후 잔상이
   남지 않게 합니다.
 - `setTabsClosable(True)` 일 때 닫기 버튼 폭(`PM_TabCloseIndicatorWidth`)만큼
   `tabSizeHint` 에 공간을 더하고, 라벨은 그 영역을 제외하고 그려 겹침을
   방지합니다.
-- 그룹 이동 시 `QVariantAnimation` 으로 각 탭의 그리기 위치를 이전 위치에서
-  새 위치로 보간하여 자연스러운 슬라이드 효과를 줍니다.
 - 선택된 탭이 속한 그룹의 탭들은 원래 QTabBar 의 선택 탭처럼 위로 올라오며,
   바 높이를 `_group_raise`(기본 3px)만큼 키워 위쪽 여백을 확보하고 일반 탭은
   그만큼 내려 그려서, 선택 그룹이 좀 더 또렷하게 올라오게 합니다.

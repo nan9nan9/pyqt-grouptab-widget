@@ -11,7 +11,7 @@ PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환된다. (qtpy 사용)
 
 import os
 
-from qtpy.QtCore import Qt, QRect, Signal, QVariantAnimation, QEasingCurve
+from qtpy.QtCore import Qt, QRect, Signal
 from qtpy.QtGui import QFont, QFontMetrics, QColor, QIcon, QMovie, QPalette
 from qtpy.QtWidgets import (
     QTabBar,
@@ -99,16 +99,11 @@ class GroupTabBar(QTabBar):
         self._accent_color = None        # None 이면 팔레트 highlight 색 사용
         self._accent_thickness = 3       # 두께(px)
 
-        # 이동 애니메이션 상태: uid -> 현재 적용할 x 오프셋(px)
-        self._anim_offsets = {}
-        self._anim_start = {}      # uid -> 애니메이션 시작 시점의 오프셋
-        self._anim = QVariantAnimation(self)
-        self._anim.setDuration(160)
-        self._anim.setStartValue(0.0)
-        self._anim.setEndValue(1.0)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim.valueChanged.connect(self._on_anim_tick)
-        self._anim.finished.connect(self._on_anim_finished)
+        # 드래그 중 잡은 그룹이 커서를 실시간으로 따라가는 가로 오프셋(px).
+        # 네이티브 QTabBar 처럼 마우스에 1:1 로 붙어 움직이므로 타이머
+        # 애니메이션이 필요 없고, 원격 X 환경에서도 부드럽다.
+        self._drag_offset = 0
+        self._drag_anchor = 0   # 그룹 좌측에서 커서를 잡은 위치
 
         # 그룹 전환 상태
         self._current_group = None
@@ -117,12 +112,6 @@ class GroupTabBar(QTabBar):
 
         # 애니메이션(GIF) 아이콘: uid -> QMovie
         self._movies = {}
-
-        # 그룹 이동 슬라이드 애니메이션 사용 여부.
-        # 원격 X 서버(Exceed TurboX/VNC/SSH X11)처럼 매 프레임 화면 전송이
-        # 느린 환경에서는 setMoveAnimationEnabled(False) 로 끄면 끊김·잔상이
-        # 사라진다.
-        self._move_anim_enabled = True
 
         # 닫기 버튼 위치 미세 조정 (오른쪽 3px, 위로 1px)
         self._btn_style = _TabButtonOffsetStyle(3, -1)
@@ -346,21 +335,6 @@ class GroupTabBar(QTabBar):
         self._btn_style.setOffset(dx, dy)
         self.relayoutTabs()
 
-    def setMoveAnimationEnabled(self, enabled):
-        """그룹 이동 시 슬라이드 애니메이션을 켜고 끈다. (기본 켜짐)
-
-        Exceed TurboX/VNC/SSH X11 같은 원격 X 환경에서는 매 프레임 화면
-        전송이 느려 끊김·잔상이 생기므로, 끄면 즉시 이동해 깔끔해진다.
-        """
-        self._move_anim_enabled = bool(enabled)
-        if not self._move_anim_enabled:
-            self._anim.stop()
-            self._on_anim_finished()
-
-    def moveAnimationEnabled(self):
-        """이동 애니메이션 사용 여부를 반환한다."""
-        return self._move_anim_enabled
-
     def setTopAccentEnabled(self, enabled):
         """선택된 그룹 탭 윗부분의 액센트 바 표시 여부를 설정한다."""
         self._top_accent = bool(enabled)
@@ -457,61 +431,17 @@ class GroupTabBar(QTabBar):
         desired = []
         for g in order:
             desired.extend(self._uid(i) for i in self.groupTabIndices(g))
-        self._animate_reorder(desired)
+        self._reorder_to_uids(desired)
         self.groupMoved.emit(group, old_index, target_order_index)
 
-    def _draw_x_by_uid(self, with_offset):
-        """현재 각 탭(uid)의 그리기 x 좌표를 반환한다."""
-        result = {}
-        for i in range(self.count()):
-            uid = self._uid(i)
-            x = self._draw_rect(i).x()
-            if with_offset:
-                x += self._anim_offsets.get(uid, 0)
-            result[uid] = x
-        return result
-
-    def _animate_reorder(self, desired_uids):
-        """탭 순서를 바꾸고, 이전 위치 -> 새 위치로 슬라이드 애니메이션한다."""
-        if not self._move_anim_enabled:
-            # 애니메이션 없이 즉시 재정렬 (원격 X 등 느린 환경용)
-            self._reorder_to_uids(desired_uids)
-            return
-        old = self._draw_x_by_uid(with_offset=True)
-        self._reorder_to_uids(desired_uids)
-        new = self._draw_x_by_uid(with_offset=False)
-
-        starts = {}
-        for uid, nx in new.items():
-            if uid in old and old[uid] != nx:
-                starts[uid] = old[uid] - nx
-        if not starts:
-            return
-        self._anim_start = starts
-        self._anim_offsets = dict(starts)   # 시작 시점엔 이전 위치에서 출발
-        self._anim.stop()
-        self._anim.start()
-        self.update()
-
-    def _on_anim_tick(self, t):
-        # t: 0.0 -> 1.0. 오프셋을 점점 0 으로 줄인다.
-        for uid, start in self._anim_start.items():
-            self._anim_offsets[uid] = start * (1.0 - float(t))
-        self.update()
-
-    def _on_anim_finished(self):
-        self._anim_offsets = {}
-        self._anim_start = {}
-        self.update()
-
-    def _target_order_index(self, x):
-        """커서 x 좌표에 대응하는, 드래그 중인 그룹의 목표 순서 인덱스."""
+    def _drag_target_index(self):
+        """잡은 그룹의 현재 시각 중심 x 기준으로 목표 순서 인덱스를 구한다."""
+        center_x = self._group_rect(self._drag_group).center().x() + self._drag_offset
         target = 0
         for g in self.groupOrder():
             if g == self._drag_group:
                 continue
-            r = self._group_rect(g)
-            if x > r.center().x():
+            if center_x > self._group_rect(g).center().x():
                 target += 1
             else:
                 break
@@ -565,11 +495,21 @@ class GroupTabBar(QTabBar):
             if not self._drag_active and self._press_pos is not None:
                 if (pos - self._press_pos).manhattanLength() >= QApplication.startDragDistance():
                     self._drag_active = True
+                    # 그룹 좌측에서 커서를 잡은 위치를 기억한다.
+                    self._drag_anchor = self._press_pos.x() - self._group_rect(self._drag_group).left()
             if self._drag_active:
-                target = self._target_order_index(pos.x())
+                # 잡은 그룹이 커서를 1:1 로 따라오도록 오프셋을 갱신한다.
+                base_left = self._group_rect(self._drag_group).left()
+                self._drag_offset = pos.x() - self._drag_anchor - base_left
+                # 다른 그룹의 중심을 넘어서면 순서를 바꾼다.
                 order = self.groupOrder()
+                target = self._drag_target_index()
                 if self._drag_group in order and order.index(self._drag_group) != target:
                     self._move_group(self._drag_group, target)
+                    # 재정렬로 기준 위치가 바뀌었으니 오프셋을 다시 계산(점프 방지)
+                    base_left = self._group_rect(self._drag_group).left()
+                    self._drag_offset = pos.x() - self._drag_anchor - base_left
+                self.update()
             # 그룹 드래그를 전담하므로, 네이티브 단일 탭 드래그가 시작되지
             # 않도록 super 로 넘기지 않는다.
             return
@@ -579,17 +519,21 @@ class GroupTabBar(QTabBar):
         self._drag_group = None
         self._drag_active = False
         self._press_pos = None
+        if self._drag_offset:
+            # 잡은 그룹은 이미 올바른 슬롯에 있으므로, 오프셋만 0 으로 되돌린다.
+            self._drag_offset = 0
+            self.update()
         super().mouseReleaseEvent(event)
 
     # ------------------------------------------------------------------ #
     # 그리기 (탭을 직접 그려서 선택 그룹 강조/애니메이션을 구현한다)
     # ------------------------------------------------------------------ #
     def _paint_rect(self, index):
-        """애니메이션 오프셋을 반영한, 탭을 그릴 최종 사각형."""
+        """드래그 오프셋을 반영한, 탭을 그릴 최종 사각형."""
         r = self._draw_rect(index)
-        off = self._anim_offsets.get(self._uid(index), 0)
-        if off:
-            r = r.translated(int(round(off)), 0)
+        if (self._drag_active and self._drag_offset
+                and self.tabGroup(index) == self._drag_group):
+            r = r.translated(self._drag_offset, 0)
         return r
 
     def _draw_tab_label(self, painter, rect, index, font, selected):
@@ -663,6 +607,11 @@ class GroupTabBar(QTabBar):
         order = other + same
         if 0 <= selected < self.count():
             order.append(selected)
+
+        # 드래그 중인 그룹은 맨 위(마지막)로 올려 그려 다른 탭 위로 떠 보이게 한다.
+        if self._drag_active and self._drag_group is not None:
+            order = [i for i in order if self.tabGroup(i) != self._drag_group] \
+                + [i for i in order if self.tabGroup(i) == self._drag_group]
 
         normal_font = self.font()
         bold_font = self._bold_font()

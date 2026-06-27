@@ -50,14 +50,6 @@ class GroupTabWidget(QTabWidget):
         super().setTabsClosable(closable)
         self._bar.relayoutTabs()
 
-    def setMoveAnimationEnabled(self, enabled):
-        """그룹 이동 슬라이드 애니메이션 on/off. (원격 X 환경에서는 off 권장)"""
-        self._bar.setMoveAnimationEnabled(enabled)
-
-    def moveAnimationEnabled(self):
-        """이동 애니메이션 사용 여부를 반환한다."""
-        return self._bar.moveAnimationEnabled()
-
     def addGroupTab(self, widget, label, group, icon=None):
         """주어진 그룹의 마지막 순서에 (위젯, 라벨) 탭을 추가한다.
 
