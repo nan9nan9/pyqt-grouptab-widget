@@ -104,6 +104,7 @@ class GroupTabBar(QTabBar):
         # 애니메이션이 필요 없고, 원격 X 환경에서도 부드럽다.
         self._drag_offset = 0
         self._drag_anchor = 0   # 그룹 좌측에서 커서를 잡은 위치
+        self._hidden_close_btns = []   # 드래그 중 잠시 숨긴 닫기 버튼들
 
         # 그룹 전환 상태
         self._current_group = None
@@ -434,6 +435,14 @@ class GroupTabBar(QTabBar):
         self._reorder_to_uids(desired)
         self.groupMoved.emit(group, old_index, target_order_index)
 
+    def _tab_close_button(self, index):
+        """해당 탭의 닫기 버튼 위젯을 반환한다. (좌/우 어느 쪽이든, 없으면 None)"""
+        for side in (QTabBar.RightSide, QTabBar.LeftSide):
+            btn = self.tabButton(index, side)
+            if btn is not None:
+                return btn
+        return None
+
     def _drag_target_index(self):
         """잡은 그룹의 현재 시각 중심 x 기준으로 목표 순서 인덱스를 구한다."""
         center_x = self._group_rect(self._drag_group).center().x() + self._drag_offset
@@ -497,6 +506,8 @@ class GroupTabBar(QTabBar):
                     self._drag_active = True
                     # 그룹 좌측에서 커서를 잡은 위치를 기억한다.
                     self._drag_anchor = self._press_pos.x() - self._group_rect(self._drag_group).left()
+                    # 떠다니는 그룹의 닫기 버튼은 위치가 어긋나므로 잠시 숨긴다.
+                    self._hide_drag_close_buttons()
             if self._drag_active:
                 # 잡은 그룹이 커서를 1:1 로 따라오도록 오프셋을 갱신한다.
                 base_left = self._group_rect(self._drag_group).left()
@@ -519,11 +530,30 @@ class GroupTabBar(QTabBar):
         self._drag_group = None
         self._drag_active = False
         self._press_pos = None
+        self._restore_drag_close_buttons()
         if self._drag_offset:
             # 잡은 그룹은 이미 올바른 슬롯에 있으므로, 오프셋만 0 으로 되돌린다.
             self._drag_offset = 0
             self.update()
         super().mouseReleaseEvent(event)
+
+    def _hide_drag_close_buttons(self):
+        self._hidden_close_btns = []
+        if not self.tabsClosable():
+            return
+        for i in self.groupTabIndices(self._drag_group):
+            btn = self._tab_close_button(i)
+            if btn is not None:
+                btn.hide()
+                self._hidden_close_btns.append(btn)
+
+    def _restore_drag_close_buttons(self):
+        for btn in self._hidden_close_btns:
+            try:
+                btn.show()
+            except RuntimeError:   # 탭이 그 사이 제거된 경우
+                pass
+        self._hidden_close_btns = []
 
     # ------------------------------------------------------------------ #
     # 그리기 (탭을 직접 그려서 선택 그룹 강조/애니메이션을 구현한다)
