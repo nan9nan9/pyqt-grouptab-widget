@@ -117,11 +117,11 @@ class GroupTabBar(QTabBar):
         self._btn_style = _TabButtonOffsetStyle(3, -1)
         self.setStyle(self._btn_style)
 
-        self.setMovable(True)
+        # 드래그는 전부 우리가 직접(커서 추적) 처리하므로 네이티브 이동은 끈다.
+        # (켜두면 일부 환경에서 네이티브 단일탭 드래그가 끼어들어, 탭은 고정인데
+        #  닫기 버튼만 움직이는 충돌이 생길 수 있다.)
+        self.setMovable(False)
         self.setDrawBase(False)
-        # 우리가 paintEvent 에서 전체 영역을 직접 채우므로, Qt 의 배경 지우기를
-        # 생략해 깜빡임을 줄인다.
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
     # ------------------------------------------------------------------ #
     # 공개 API
