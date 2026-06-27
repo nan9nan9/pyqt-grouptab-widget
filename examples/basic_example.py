@@ -112,6 +112,11 @@ class DemoWindow(QWidget):
         close_chk.toggled.connect(self.tabs.setTabsClosable)
         controls.addWidget(close_chk)
 
+        anim_chk = QCheckBox("이동 애니메이션")
+        anim_chk.setChecked(self.tabs.moveAnimationEnabled())
+        anim_chk.toggled.connect(self.tabs.setMoveAnimationEnabled)
+        controls.addWidget(anim_chk)
+
         controls.addStretch(1)
 
         # 그룹 전환 버튼

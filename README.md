@@ -134,7 +134,12 @@ tabbar.addGroupTab("Tab4", 1)   # 결과 순서: Tab1, Tab2, Tab4, Tab3
 | `setTopAccentEnabled(bool)` / `topAccentEnabled()` | 상단 액센트 바 on/off (기본 on) |
 | `setTopAccentColor(color)` | 액센트 바 색상 (None 이면 팔레트 highlight) |
 | `setTabsClosable(bool)` | 닫기 버튼 표시 on/off |
+| `setMoveAnimationEnabled(bool)` / `moveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
 | (그 외) | `QTabWidget` 의 모든 메서드 사용 가능 |
+
+> **원격 X 환경(Exceed TurboX / VNC / SSH X11) 팁**: 매 프레임 화면 전송이
+> 느린 원격 디스플레이에서는 이동 애니메이션이 끊기거나 잔상이 남을 수 있습니다.
+> 이때 `tabs.setMoveAnimationEnabled(False)` 로 끄면 즉시 이동해 깔끔합니다.
 
 ### GroupTabBar
 

@@ -118,12 +118,21 @@ class GroupTabBar(QTabBar):
         # 애니메이션(GIF) 아이콘: uid -> QMovie
         self._movies = {}
 
+        # 그룹 이동 슬라이드 애니메이션 사용 여부.
+        # 원격 X 서버(Exceed TurboX/VNC/SSH X11)처럼 매 프레임 화면 전송이
+        # 느린 환경에서는 setMoveAnimationEnabled(False) 로 끄면 끊김·잔상이
+        # 사라진다.
+        self._move_anim_enabled = True
+
         # 닫기 버튼 위치 미세 조정 (오른쪽 3px, 위로 1px)
         self._btn_style = _TabButtonOffsetStyle(3, -1)
         self.setStyle(self._btn_style)
 
         self.setMovable(True)
         self.setDrawBase(False)
+        # 우리가 paintEvent 에서 전체 영역을 직접 채우므로, Qt 의 배경 지우기를
+        # 생략해 깜빡임을 줄인다.
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
     # ------------------------------------------------------------------ #
     # 공개 API
@@ -337,6 +346,21 @@ class GroupTabBar(QTabBar):
         self._btn_style.setOffset(dx, dy)
         self.relayoutTabs()
 
+    def setMoveAnimationEnabled(self, enabled):
+        """그룹 이동 시 슬라이드 애니메이션을 켜고 끈다. (기본 켜짐)
+
+        Exceed TurboX/VNC/SSH X11 같은 원격 X 환경에서는 매 프레임 화면
+        전송이 느려 끊김·잔상이 생기므로, 끄면 즉시 이동해 깔끔해진다.
+        """
+        self._move_anim_enabled = bool(enabled)
+        if not self._move_anim_enabled:
+            self._anim.stop()
+            self._on_anim_finished()
+
+    def moveAnimationEnabled(self):
+        """이동 애니메이션 사용 여부를 반환한다."""
+        return self._move_anim_enabled
+
     def setTopAccentEnabled(self, enabled):
         """선택된 그룹 탭 윗부분의 액센트 바 표시 여부를 설정한다."""
         self._top_accent = bool(enabled)
@@ -401,11 +425,19 @@ class GroupTabBar(QTabBar):
         return rect
 
     def _reorder_to_uids(self, desired_uids):
-        """탭들을 desired_uids 의 순서가 되도록 재정렬한다."""
-        for target, uid in enumerate(desired_uids):
-            cur = self._index_of_uid(uid)
-            if cur != -1 and cur != target:
-                self.moveTab(cur, target)
+        """탭들을 desired_uids 의 순서가 되도록 재정렬한다.
+
+        재정렬 중 moveTab 마다 발생하는 중간 repaint 를 억제해, 원격 X
+        환경에서도 화면 전송이 한 번만 일어나게 한다.
+        """
+        self.setUpdatesEnabled(False)
+        try:
+            for target, uid in enumerate(desired_uids):
+                cur = self._index_of_uid(uid)
+                if cur != -1 and cur != target:
+                    self.moveTab(cur, target)
+        finally:
+            self.setUpdatesEnabled(True)
         self.update()
 
     def _move_group(self, group, target_order_index):
@@ -441,6 +473,10 @@ class GroupTabBar(QTabBar):
 
     def _animate_reorder(self, desired_uids):
         """탭 순서를 바꾸고, 이전 위치 -> 새 위치로 슬라이드 애니메이션한다."""
+        if not self._move_anim_enabled:
+            # 애니메이션 없이 즉시 재정렬 (원격 X 등 느린 환경용)
+            self._reorder_to_uids(desired_uids)
+            return
         old = self._draw_x_by_uid(with_offset=True)
         self._reorder_to_uids(desired_uids)
         new = self._draw_x_by_uid(with_offset=False)
