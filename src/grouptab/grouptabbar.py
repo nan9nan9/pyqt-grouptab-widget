@@ -104,7 +104,6 @@ class GroupTabBar(QTabBar):
         # 애니메이션이 필요 없고, 원격 X 환경에서도 부드럽다.
         self._drag_offset = 0
         self._drag_anchor = 0   # 그룹 좌측에서 커서를 잡은 위치
-        self._hidden_close_btns = []   # 드래그 중 잠시 숨긴 닫기 버튼들
 
         # 그룹 전환 상태
         self._current_group = None
@@ -443,6 +442,28 @@ class GroupTabBar(QTabBar):
                 return btn
         return None
 
+    def _follow_drag_close_buttons(self):
+        """드래그 중 잡은 그룹의 닫기 버튼이 탭과 함께 움직이게 위치를 옮긴다.
+
+        닫기 버튼은 자식 위젯이라 우리가 그리는 탭 오프셋을 따라오지 않으므로,
+        스타일이 정한 기본 위치에 드래그 오프셋을 더해 직접 이동시킨다.
+        놓을 때 relayoutTabs() 로 원위치로 복원된다.
+        """
+        if not self.tabsClosable():
+            return
+        on_left = self._close_indicator()[1]
+        elem = (QStyle.SE_TabBarTabLeftButton if on_left
+                else QStyle.SE_TabBarTabRightButton)
+        for i in self.groupTabIndices(self._drag_group):
+            btn = self._tab_close_button(i)
+            if btn is None:
+                continue
+            opt = QStyleOptionTab()
+            self.initStyleOption(opt, i)
+            opt.rect = self._draw_rect(i)   # 오프셋 미포함 기본 위치
+            r = self.style().subElementRect(elem, opt, self)
+            btn.move(r.x() + self._drag_offset, r.y())
+
     def _drag_target_index(self):
         """잡은 그룹의 현재 시각 중심 x 기준으로 목표 순서 인덱스를 구한다."""
         center_x = self._group_rect(self._drag_group).center().x() + self._drag_offset
@@ -506,8 +527,6 @@ class GroupTabBar(QTabBar):
                     self._drag_active = True
                     # 그룹 좌측에서 커서를 잡은 위치를 기억한다.
                     self._drag_anchor = self._press_pos.x() - self._group_rect(self._drag_group).left()
-                    # 떠다니는 그룹의 닫기 버튼은 위치가 어긋나므로 잠시 숨긴다.
-                    self._hide_drag_close_buttons()
             if self._drag_active:
                 # 잡은 그룹이 커서를 1:1 로 따라오도록 오프셋을 갱신한다.
                 base_left = self._group_rect(self._drag_group).left()
@@ -520,6 +539,8 @@ class GroupTabBar(QTabBar):
                     # 재정렬로 기준 위치가 바뀌었으니 오프셋을 다시 계산(점프 방지)
                     base_left = self._group_rect(self._drag_group).left()
                     self._drag_offset = pos.x() - self._drag_anchor - base_left
+                # 닫기 버튼(자식 위젯)도 탭과 함께 움직이게 한다.
+                self._follow_drag_close_buttons()
                 self.update()
             # 그룹 드래그를 전담하므로, 네이티브 단일 탭 드래그가 시작되지
             # 않도록 super 로 넘기지 않는다.
@@ -527,33 +548,18 @@ class GroupTabBar(QTabBar):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        was_dragging = self._drag_active
         self._drag_group = None
         self._drag_active = False
         self._press_pos = None
-        self._restore_drag_close_buttons()
         if self._drag_offset:
             # 잡은 그룹은 이미 올바른 슬롯에 있으므로, 오프셋만 0 으로 되돌린다.
             self._drag_offset = 0
             self.update()
+        if was_dragging and self.tabsClosable():
+            # 드래그 중 옮겼던 닫기 버튼들을 스타일 기본 위치로 복원한다.
+            self.relayoutTabs()
         super().mouseReleaseEvent(event)
-
-    def _hide_drag_close_buttons(self):
-        self._hidden_close_btns = []
-        if not self.tabsClosable():
-            return
-        for i in self.groupTabIndices(self._drag_group):
-            btn = self._tab_close_button(i)
-            if btn is not None:
-                btn.hide()
-                self._hidden_close_btns.append(btn)
-
-    def _restore_drag_close_buttons(self):
-        for btn in self._hidden_close_btns:
-            try:
-                btn.show()
-            except RuntimeError:   # 탭이 그 사이 제거된 경우
-                pass
-        self._hidden_close_btns = []
 
     # ------------------------------------------------------------------ #
     # 그리기 (탭을 직접 그려서 선택 그룹 강조/애니메이션을 구현한다)
