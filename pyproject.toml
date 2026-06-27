@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyqt-grouptab-widget"
+version = "0.1.0"
+description = "탭을 그룹 단위로 묶어 동작하는 Qt 탭 위젯 (qtpy 추상화 — PyQt5/PyQt6/PySide2/PySide6 호환)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "GPL-2.0-or-later" }
+authors = [{ name = "jekai", email = "jekai.jeong@gmail.com" }]
+keywords = ["qt", "qtpy", "pyside2", "pyside6", "pyqt5", "pyqt6", "tab", "tabbar", "tabwidget", "group", "widget"]
+# qtpy는 Qt 바인딩을 추상화한다. 실제 Qt 바인딩(아래 중 하나)은 호스트 환경에 설치되어 있어야 한다.
+dependencies = [
+    "qtpy>=2.0",
+]
+
+[project.optional-dependencies]
+# 바인딩을 직접 끌어오고 싶을 때 (택1). 미지정 시 호스트에 이미 설치된 바인딩을 사용.
+pyside2 = ["PySide2>=5.12"]
+pyside6 = ["PySide6>=6.5"]
+pyqt5 = ["PyQt5>=5.12"]
+pyqt6 = ["PyQt6>=6.5"]
+dev = [
+    "pytest>=7.0",
+    "pytest-qt>=4.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/nan9nan9/pyqt-grouptab-widget"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# 기본 제공 GIF 아이콘을 패키지에 함께 배포한다.
+grouptab = [
+    "py.typed",
+    "assets/*.gif",
+]
+
+[tool.pytest.ini_options]
+# src-layout 패키지를 설치 없이 import 할 수 있도록 경로 추가
+pythonpath = ["src"]
+testpaths = ["tests"]

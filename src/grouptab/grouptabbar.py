@@ -23,8 +23,8 @@ from qtpy.QtWidgets import (
 )
 
 
-# 기본 제공 GIF 아이콘이 있는 디렉토리 (이 파일과 같은 위치)
-_ASSET_DIR = os.path.dirname(os.path.abspath(__file__))
+# 기본 제공 GIF 아이콘이 있는 디렉토리 (패키지 내 assets/)
+_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 class _TabButtonOffsetStyle(QProxyStyle):

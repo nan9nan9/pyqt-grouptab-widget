@@ -2,8 +2,8 @@
 
 그룹핑이 가능한 탭 위젯입니다. 두 가지 클래스를 제공합니다.
 
-- **`GroupTabBar`** (`grouptabbar.py`) — `QTabBar` 기반 탭 바.
-- **`GroupTabWidget`** (`grouptabwidget.py`) — `QTabWidget` 기반으로, 탭마다
+- **`GroupTabBar`** (`grouptab.GroupTabBar`) — `QTabBar` 기반 탭 바.
+- **`GroupTabWidget`** (`grouptab.GroupTabWidget`) — `QTabWidget` 기반으로, 탭마다
   **위젯(페이지)을 등록**할 수 있습니다. 내부적으로 `GroupTabBar` 를 탭 바로
   사용합니다.
 
@@ -23,18 +23,33 @@
 ## 설치
 
 ```bash
-pip install -r requirements.txt
+pip install -e .          # qtpy 와 함께 grouptab 패키지 설치
 # 그리고 PyQt5 / PyQt6 / PySide2 / PySide6 중 하나가 설치되어 있어야 합니다.
+```
+
+설치 없이 쓰려면 `src/` 를 `PYTHONPATH` 에 추가하거나, 예제처럼 경로를 등록하면 됩니다.
+
+## 디렉토리 구조
+
+```
+src/grouptab/          # 패키지
+  __init__.py          # GroupTabBar, GroupTabWidget export
+  grouptabbar.py
+  grouptabwidget.py
+  assets/              # 기본 제공 GIF (loading.gif, gear.gif)
+examples/
+  basic_example.py     # 데모 앱
+pyproject.toml
 ```
 
 ## 데모 실행
 
 ```bash
-python demo.py
+python examples/basic_example.py
 
 # 특정 바인딩으로 실행
-QT_API=pyqt6   python demo.py
-QT_API=pyside6 python demo.py
+QT_API=pyqt6   python examples/basic_example.py
+QT_API=pyside6 python examples/basic_example.py
 ```
 
 데모에는 그룹별 색상 아이콘 / 아이콘 없는 탭 / **애니메이션 GIF 아이콘**이
@@ -43,7 +58,8 @@ QT_API=pyside6 python demo.py
 있습니다.
 
 기본 제공 GIF(`loading.gif` 회전 스피너, `gear.gif` 회전 톱니바퀴)는
-프로젝트에 포함되어 있습니다.
+패키지(`src/grouptab/assets/`)에 포함되어 있어 `setTabLoading()` / `setTabGear()`
+로 바로 사용할 수 있습니다.
 
 ## 사용법
 
@@ -51,7 +67,7 @@ QT_API=pyside6 python demo.py
 
 ```python
 from qtpy.QtWidgets import QLabel
-from grouptabwidget import GroupTabWidget
+from grouptab import GroupTabWidget
 
 tabs = GroupTabWidget()
 
@@ -91,7 +107,7 @@ tabs.removeTab(0)
 ### GroupTabBar (탭 바만 필요할 때)
 
 ```python
-from grouptabbar import GroupTabBar
+from grouptab import GroupTabBar
 
 tabbar = GroupTabBar()
 tabbar.addGroupTab("Tab1", 1)   # addGroupTab(텍스트, 그룹번호)

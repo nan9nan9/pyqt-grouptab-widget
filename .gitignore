@@ -2,14 +2,34 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-.eggs/
+*.egg
 build/
 dist/
+.eggs/
+
+# 가상환경
 .venv/
 venv/
+env/
+
+# 테스트 / 린트 캐시
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
 
 # Claude Code 로컬 설정
 .claude/
 
+# IDE / 에디터
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
 # OS
 .DS_Store
+Thumbs.db

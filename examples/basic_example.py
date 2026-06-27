@@ -2,14 +2,18 @@
 """GroupTabWidget 데모 앱.
 
 실행:
-    python demo.py
+    python examples/basic_example.py
 
 특정 바인딩으로 실행하려면 QT_API 환경변수를 지정한다.
-    QT_API=pyqt6 python demo.py
-    QT_API=pyside6 python demo.py
+    QT_API=pyqt6   python examples/basic_example.py
+    QT_API=pyside6 python examples/basic_example.py
 """
 
+import os
 import sys
+
+# 설치 없이 바로 실행할 수 있도록 src 경로를 등록 (pip install 한 경우엔 불필요)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon, QPixmap, QColor, QPainter
@@ -24,7 +28,7 @@ from qtpy.QtWidgets import (
     QCheckBox,
 )
 
-from grouptabwidget import GroupTabWidget
+from grouptab import GroupTabWidget
 
 
 # 그룹 번호별 색상 팔레트

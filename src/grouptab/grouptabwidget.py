@@ -15,7 +15,7 @@ PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환된다. (qtpy 사용)
 
 from qtpy.QtWidgets import QTabWidget
 
-from grouptabbar import GroupTabBar
+from .grouptabbar import GroupTabBar
 
 
 class GroupTabWidget(QTabWidget):
