@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""GroupTabWidget 데모 앱.
+"""GroupTabWidget 데모 앱 (QMainWindow + setCentralWidget 구조).
+
+실제 앱처럼 GroupTabWidget 을 QMainWindow 의 centralWidget 으로 등록한다.
 
 실행:
     python examples/basic_example.py
@@ -19,9 +21,10 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon, QPixmap, QColor, QPainter
 from qtpy.QtWidgets import (
     QApplication,
+    QMainWindow,
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
+    QToolBar,
     QPushButton,
     QSpinBox,
     QLabel,
@@ -69,84 +72,27 @@ def _make_page(label, group):
     return page
 
 
-class DemoWindow(QWidget):
+class DemoWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GroupTabWidget 데모")
-        self.resize(720, 360)
+        self.setWindowTitle("GroupTabWidget 데모 (QMainWindow)")
+        self.resize(760, 400)
 
         self._tab_counter = 0
 
-        layout = QVBoxLayout(self)
-
-        # 그룹 탭 위젯 (탭마다 페이지가 붙는다)
+        # 실제 앱과 동일하게 GroupTabWidget 을 centralWidget 으로 등록한다.
         self.tabs = GroupTabWidget()
         self.tabs.tabBar().setExpanding(False)
-        # 닫기 버튼 클릭 시 해당 탭 제거
         self.tabs.tabCloseRequested.connect(self.tabs.removeTab)
-        layout.addWidget(self.tabs)
+        self.setCentralWidget(self.tabs)
 
-        # 컨트롤 영역
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel("그룹:"))
+        self._build_toolbars()
 
-        self.group_spin = QSpinBox()
-        self.group_spin.setRange(1, 9)
-        self.group_spin.setValue(1)
-        controls.addWidget(self.group_spin)
-
-        add_btn = QPushButton("탭 추가")
-        add_btn.clicked.connect(self._on_add)
-        controls.addWidget(add_btn)
-
-        remove_btn = QPushButton("현재 탭 삭제")
-        remove_btn.clicked.connect(self._on_remove)
-        controls.addWidget(remove_btn)
-
-        accent_chk = QCheckBox("상단 액센트 바")
-        accent_chk.setChecked(self.tabs.topAccentEnabled())
-        accent_chk.toggled.connect(self.tabs.setTopAccentEnabled)
-        controls.addWidget(accent_chk)
-
-        close_chk = QCheckBox("닫기 버튼")
-        close_chk.toggled.connect(self.tabs.setTabsClosable)
-        controls.addWidget(close_chk)
-
-        controls.addStretch(1)
-
-        # 그룹 전환 버튼
-        prev_grp = QPushButton("◀ 그룹")
-        prev_grp.clicked.connect(self.tabs.previousGroup)
-        controls.addWidget(prev_grp)
-
-        next_grp = QPushButton("그룹 ▶")
-        next_grp.clicked.connect(self.tabs.nextGroup)
-        controls.addWidget(next_grp)
-
-        layout.addLayout(controls)
-
-        # 현재 탭 아이콘 변경 버튼들 (없음 / 색 점 / Loading GIF / Gear GIF)
-        icon_controls = QHBoxLayout()
-        icon_controls.addWidget(QLabel("현재 탭 아이콘:"))
-        kinds = [("색 점", "color"), ("Loading", "loading"),
-                 ("Gear", "gear"), ("없음", "none")]
-        for text, kind in kinds:
-            btn = QPushButton(text)
-            btn.clicked.connect(lambda checked=False, k=kind: self._set_current_icon(k))
-            icon_controls.addWidget(btn)
-        icon_controls.addStretch(1)
-        layout.addLayout(icon_controls)
-
-        # 현재 그룹 표시
-        self.group_label = QLabel()
+        # 현재 그룹 표시 (상태바)
         self.tabs.currentGroupChanged.connect(self._on_group_changed)
-        layout.addWidget(self.group_label)
+        self.statusBar().showMessage("탭을 드래그하면 같은 그룹 전체가 함께 이동합니다.")
 
-        hint = QLabel("탭을 드래그하면 같은 그룹 전체가 페이지와 함께 이동합니다.")
-        layout.addWidget(hint)
-
-        # 초기 샘플 탭 구성: 이름 길이와 아이콘 종류를 다양하게.
-        #   color = 그룹 색 점 / none = 아이콘 없음 / loading, gear = GIF
+        # 초기 샘플 탭: 이름 길이와 아이콘 종류를 다양하게.
         samples = [
             (1, "홈", "color"),
             (1, "대시보드", "color"),
@@ -160,6 +106,47 @@ class DemoWindow(QWidget):
         for group, name, kind in samples:
             self._add_tab(name, group, kind)
         self.tabs.setCurrentIndex(0)
+
+    def _build_toolbars(self):
+        tb = QToolBar("controls")
+        tb.setMovable(False)
+        self.addToolBar(Qt.BottomToolBarArea, tb)
+
+        tb.addWidget(QLabel(" 그룹: "))
+        self.group_spin = QSpinBox()
+        self.group_spin.setRange(1, 9)
+        self.group_spin.setValue(1)
+        tb.addWidget(self.group_spin)
+        tb.addWidget(self._btn("탭 추가", self._on_add))
+        tb.addWidget(self._btn("현재 탭 삭제", self._on_remove))
+
+        close_chk = QCheckBox("닫기 버튼")
+        close_chk.toggled.connect(self.tabs.setTabsClosable)
+        tb.addWidget(close_chk)
+
+        accent_chk = QCheckBox("상단 액센트 바")
+        accent_chk.setChecked(self.tabs.topAccentEnabled())
+        accent_chk.toggled.connect(self.tabs.setTopAccentEnabled)
+        tb.addWidget(accent_chk)
+
+        tb.addWidget(self._btn("◀ 그룹", self.tabs.previousGroup))
+        tb.addWidget(self._btn("그룹 ▶", self.tabs.nextGroup))
+
+        # 아이콘 변경 버튼들 (두 번째 줄)
+        self.addToolBarBreak(Qt.BottomToolBarArea)
+        tb2 = QToolBar("icons")
+        tb2.setMovable(False)
+        self.addToolBar(Qt.BottomToolBarArea, tb2)
+        tb2.addWidget(QLabel(" 현재 탭 아이콘: "))
+        for text, kind in [("색 점", "color"), ("Loading", "loading"),
+                           ("Gear", "gear"), ("없음", "none")]:
+            tb2.addWidget(self._btn(
+                text, lambda checked=False, k=kind: self._set_current_icon(k)))
+
+    def _btn(self, text, slot):
+        b = QPushButton(text)
+        b.clicked.connect(slot)
+        return b
 
     # "탭 추가" 버튼으로 넣을 때 쓸, 길이가 다양한 이름 후보들
     _NAME_POOL = [
@@ -189,15 +176,14 @@ class DemoWindow(QWidget):
             self.tabs.removeTab(idx)
 
     def _on_group_changed(self, group):
-        self.group_label.setText("현재 그룹: {}".format(group))
+        self.statusBar().showMessage("현재 그룹: {}".format(group))
 
     def _set_current_icon(self, kind):
         """현재 탭의 아이콘을 없음/색 점/Loading GIF/Gear GIF 로 바꾼다."""
         idx = self.tabs.currentIndex()
         if idx < 0:
             return
-        # 진행 중인 GIF 가 있으면 먼저 해제
-        self.tabs.setTabMovie(idx, None)
+        self.tabs.setTabMovie(idx, None)   # 진행 중인 GIF 가 있으면 해제
         if kind == "color":
             self.tabs.setTabIcon(idx, _group_icon(self.tabs.tabGroup(idx)))
         elif kind == "none":
