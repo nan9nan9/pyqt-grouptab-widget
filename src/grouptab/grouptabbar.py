@@ -104,6 +104,7 @@ class GroupTabBar(QTabBar):
         # 애니메이션이 필요 없고, 원격 X 환경에서도 부드럽다.
         self._drag_offset = 0
         self._drag_anchor = 0   # 그룹 좌측에서 커서를 잡은 위치
+        self._hidden_close_btns = []  # 드래그 중 숨긴 (잡은 그룹 외) 닫기 버튼
 
         # 그룹 전환 상태
         self._current_group = None
@@ -442,6 +443,32 @@ class GroupTabBar(QTabBar):
                 return btn
         return None
 
+    def _hide_other_close_buttons(self):
+        """드래그 중, 잡은 그룹을 제외한 다른 그룹들의 닫기 버튼을 숨긴다.
+
+        닫기 버튼은 자식 위젯이라 항상 부모 paint 위에 그려진다. 떠 있는 그룹
+        아래로 깔리는 다른 그룹의 X 가 위로 뚫고 나오는 오버랩을 막기 위해
+        잠시 숨기고, 놓을 때 복원한다.
+        """
+        self._hidden_close_btns = []
+        if not self.tabsClosable():
+            return
+        for i in range(self.count()):
+            if self.tabGroup(i) == self._drag_group:
+                continue
+            btn = self._tab_close_button(i)
+            if btn is not None and btn.isVisible():
+                btn.hide()
+                self._hidden_close_btns.append(btn)
+
+    def _restore_close_buttons(self):
+        for btn in self._hidden_close_btns:
+            try:
+                btn.show()
+            except RuntimeError:   # 탭이 그 사이 제거된 경우
+                pass
+        self._hidden_close_btns = []
+
     def _follow_drag_close_buttons(self):
         """드래그 중 잡은 그룹의 닫기 버튼이 탭과 함께 움직이게 위치를 옮긴다.
 
@@ -527,6 +554,8 @@ class GroupTabBar(QTabBar):
                     self._drag_active = True
                     # 그룹 좌측에서 커서를 잡은 위치를 기억한다.
                     self._drag_anchor = self._press_pos.x() - self._group_rect(self._drag_group).left()
+                    # 떠 있는 그룹에 깔리는 다른 그룹 X 의 오버랩을 막는다.
+                    self._hide_other_close_buttons()
             if self._drag_active:
                 # 잡은 그룹이 커서를 1:1 로 따라오도록 오프셋을 갱신한다.
                 base_left = self._group_rect(self._drag_group).left()
@@ -556,6 +585,7 @@ class GroupTabBar(QTabBar):
             # 잡은 그룹은 이미 올바른 슬롯에 있으므로, 오프셋만 0 으로 되돌린다.
             self._drag_offset = 0
             self.update()
+        self._restore_close_buttons()   # 숨겼던 다른 그룹 X 복원
         if was_dragging and self.tabsClosable():
             # 드래그 중 옮겼던 닫기 버튼들을 스타일 기본 위치로 복원한다.
             self.relayoutTabs()
