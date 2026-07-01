@@ -26,6 +26,11 @@ class GroupTabWidget(QTabWidget):
             (group, oldOrderIndex, newOrderIndex)
     """
 
+    # 그룹탭 모양 타입 (GroupTabBar 의 것을 그대로 노출).
+    STYLE_ROUNDED = GroupTabBar.STYLE_ROUNDED
+    STYLE_LEFT_COLOR = GroupTabBar.STYLE_LEFT_COLOR
+    STYLE_PLAIN = GroupTabBar.STYLE_PLAIN
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._bar = GroupTabBar(self)
@@ -149,3 +154,31 @@ class GroupTabWidget(QTabWidget):
     def setTopAccentColor(self, color):
         """액센트 바 색상 설정. (None 이면 팔레트 highlight 색)"""
         self._bar.setTopAccentColor(color)
+
+    def setGroupStyle(self, style):
+        """그룹탭 모양 타입을 설정한다.
+
+        STYLE_ROUNDED(양끝 라운딩) / STYLE_LEFT_COLOR(첫 탭 왼쪽 색상 마커)
+        / STYLE_PLAIN(네이티브 탭) 중 하나.
+        """
+        self._bar.setGroupStyle(style)
+
+    def groupStyle(self):
+        """현재 그룹탭 모양 타입을 반환한다."""
+        return self._bar.groupStyle()
+
+    def setGroupColor(self, group, color):
+        """타입2(STYLE_LEFT_COLOR)에서 특정 그룹의 마커 색을 지정한다."""
+        self._bar.setGroupColor(group, color)
+
+    def setGroupMoveAnimationEnabled(self, enabled):
+        """그룹 이동 슬라이드 애니메이션을 켜고 끈다. (기본 켜짐)
+
+        이 옵션만으로 제어되며, Qt/QTabWidget 의 전역 애니메이션 설정과는
+        무관하게 동작한다.
+        """
+        self._bar.setGroupMoveAnimationEnabled(enabled)
+
+    def groupMoveAnimationEnabled(self):
+        """그룹 이동 슬라이드 애니메이션 사용 여부."""
+        return self._bar.groupMoveAnimationEnabled()

@@ -29,6 +29,7 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QLabel,
     QCheckBox,
+    QComboBox,
 )
 
 from grouptab import GroupTabWidget
@@ -129,6 +130,25 @@ class DemoWindow(QMainWindow):
         accent_chk.toggled.connect(self.tabs.setTopAccentEnabled)
         tb.addWidget(accent_chk)
 
+        anim_chk = QCheckBox("이동 애니메이션")
+        anim_chk.setChecked(self.tabs.groupMoveAnimationEnabled())
+        anim_chk.toggled.connect(self.tabs.setGroupMoveAnimationEnabled)
+        tb.addWidget(anim_chk)
+
+        # 그룹탭 모양 타입 선택
+        tb.addWidget(QLabel(" 모양: "))
+        style_combo = QComboBox()
+        # (표시 이름, 스타일 값) 순서 = 타입1/2/3
+        self._styles = [
+            ("라운딩", GroupTabWidget.STYLE_ROUNDED),
+            ("왼쪽 색상", GroupTabWidget.STYLE_LEFT_COLOR),
+            ("네이티브", GroupTabWidget.STYLE_PLAIN),
+        ]
+        for name, _ in self._styles:
+            style_combo.addItem(name)
+        style_combo.currentIndexChanged.connect(self._on_style_changed)
+        tb.addWidget(style_combo)
+
         tb.addWidget(self._btn("◀ 그룹", self.tabs.previousGroup))
         tb.addWidget(self._btn("그룹 ▶", self.tabs.nextGroup))
 
@@ -174,6 +194,12 @@ class DemoWindow(QMainWindow):
         idx = self.tabs.currentIndex()
         if idx != -1:
             self.tabs.removeTab(idx)
+
+    def _on_style_changed(self, index):
+        """그룹탭 모양 타입을 전환한다."""
+        name, style = self._styles[index]
+        self.tabs.setGroupStyle(style)
+        self.statusBar().showMessage("그룹탭 모양: {}".format(name))
 
     def _on_group_changed(self, group):
         self.statusBar().showMessage("현재 그룹: {}".format(group))
