@@ -1,0 +1,285 @@
+# -*- coding: utf-8 -*-
+"""GroupTabBar / GroupTabWidget 회귀 테스트.
+
+핵심 불변식(같은 그룹 탭의 인접성, 재정렬 정확성), 시그널 계약, 그리고
+과거에 잡았던 버그(슬라이드 애니메이션 중 닫기 X 히트 테스트)를 검증한다.
+
+PyQt5 / PyQt6 / PySide2 / PySide6 어디서 돌려도 동일하게 통과해야 한다.
+"""
+import random
+import warnings
+
+import pytest
+
+from qtpy.QtCore import Qt, QEvent, QPoint
+from qtpy.QtGui import QMouseEvent
+from qtpy.QtWidgets import QLabel
+
+from grouptab.grouptabbar import GroupTabBar
+from grouptab.grouptabwidget import GroupTabWidget
+
+try:
+    from qtpy.QtCore import QPointF
+except ImportError:  # 매우 오래된 바인딩 방어
+    QPointF = None
+
+
+# ------------------------------------------------------------------ #
+# 헬퍼
+# ------------------------------------------------------------------ #
+def make_bar(spec):
+    """spec = [(group, tab_count), ...] 로 GroupTabBar 를 만든다."""
+    bar = GroupTabBar()
+    bar.resize(4000, 40)
+    for group, cnt in spec:
+        for k in range(cnt):
+            bar.addGroupTab("%s-%d" % (group, k), group)
+    return bar
+
+
+def group_runs(bar):
+    """표시 순서대로 그룹이 바뀌는 지점을 묶어 [group, ...] 런 목록으로."""
+    runs = []
+    for i in range(bar.count()):
+        g = bar.tabGroup(i)
+        if not runs or runs[-1] != g:
+            runs.append(g)
+    return runs
+
+
+def is_contiguous(bar):
+    """같은 그룹 탭이 항상 인접(연속)한다는 핵심 불변식."""
+    runs = group_runs(bar)
+    return len(runs) == len(set(runs))
+
+
+def uid_order(bar):
+    return [bar._uid(i) for i in range(bar.count())]
+
+
+def mouse_event(kind, x, y):
+    # 일부 바인딩에서 QPointF 오버로드가 deprecated 경고를 내지만 동작은
+    # 정상이므로, 테스트 출력을 깨끗이 유지하려 해당 경고만 억제한다.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        if QPointF is not None:
+            try:
+                return QMouseEvent(kind, QPointF(x, y), Qt.LeftButton,
+                                   Qt.LeftButton, Qt.NoModifier)
+            except (TypeError, ValueError):
+                pass
+        return QMouseEvent(kind, QPoint(x, y), Qt.LeftButton,
+                           Qt.LeftButton, Qt.NoModifier)
+
+
+# ------------------------------------------------------------------ #
+# 기본 불변식
+# ------------------------------------------------------------------ #
+def test_creation_contiguous_and_unique(qapp):
+    bar = make_bar([("A", 3), ("B", 1), ("C", 4)])
+    assert bar.count() == 8
+    assert is_contiguous(bar)
+    order = bar.groupOrder()
+    assert order == ["A", "B", "C"]
+    assert len(order) == len(set(order))
+    uids = uid_order(bar)
+    assert len(uids) == len(set(uids)) and None not in uids
+
+
+def test_add_to_existing_group_keeps_block(qapp):
+    bar = make_bar([("A", 2), ("B", 2)])
+    # 이미 있는 그룹 A 에 추가하면 A 블록 끝(인덱스 2)에 삽입되어야 한다.
+    idx = bar.addGroupTab("A-new", "A")
+    assert idx == 2
+    assert is_contiguous(bar)
+    assert bar.groupOrder() == ["A", "B"]
+
+
+# ------------------------------------------------------------------ #
+# 그룹 이동(재정렬) 정확성
+# ------------------------------------------------------------------ #
+def test_move_group_preserves_invariants_fuzz(qapp):
+    random.seed(1234)
+    bar = make_bar([(g, random.randint(1, 6)) for g in range(12)])
+    total = bar.count()
+    for _ in range(400):
+        order = bar.groupOrder()
+        g = random.choice(order)
+        before = {gr: [bar._uid(i) for i in bar.groupTabIndices(gr)] for gr in order}
+        bar._move_group(g, random.randint(0, len(order) - 1))
+        assert is_contiguous(bar)
+        assert bar.count() == total
+        after = {gr: [bar._uid(i) for i in bar.groupTabIndices(gr)]
+                 for gr in bar.groupOrder()}
+        # 각 그룹 내부의 상대 순서는 보존되어야 한다.
+        for gr in order:
+            assert before[gr] == after[gr]
+
+
+def test_move_group_exact_order(qapp):
+    bar = make_bar([("A", 2), ("B", 2), ("C", 2)])
+    bar._move_group("A", 2)
+    assert bar.groupOrder() == ["B", "C", "A"]
+    bar._move_group("A", 0)
+    assert bar.groupOrder() == ["A", "B", "C"]
+
+
+def test_animation_on_off_same_final_order(qapp):
+    """애니메이션 유무와 무관하게 최종 탭 배치는 동일해야 한다."""
+    random.seed(7)
+    on = make_bar([(g, 3) for g in range(8)])
+    off = make_bar([(g, 3) for g in range(8)])
+    off.setGroupMoveAnimationEnabled(False)
+    for _ in range(50):
+        g = random.randint(0, 7)
+        tgt = random.randint(0, 7)
+        on._move_group(g, tgt)
+        off._move_group(g, tgt)
+        on._slide_anim.stop()
+        on._on_slide_anim_done()
+    assert uid_order(on) == uid_order(off)
+    assert on._anim_offsets == {} and on._anim_base == {}
+
+
+# ------------------------------------------------------------------ #
+# 시그널 계약
+# ------------------------------------------------------------------ #
+def test_current_group_changed_only_on_group_change(qapp):
+    bar = make_bar([("A", 3), ("B", 3)])
+    seen = []
+    bar.currentGroupChanged.connect(seen.append)
+
+    bar.setCurrentIndex(0)          # 그룹 A
+    seen.clear()
+    bar.setCurrentIndex(1)          # 여전히 A → 방출 없음
+    bar.setCurrentIndex(2)          # 여전히 A → 방출 없음
+    assert seen == []
+    bar.setCurrentIndex(3)          # B → 정확히 1회
+    assert seen == ["B"]
+
+
+def test_group_moved_signal(qapp):
+    bar = make_bar([("A", 2), ("B", 2), ("C", 2)])
+    moved = []
+    bar.groupMoved.connect(lambda g, o, n: moved.append((g, o, n)))
+
+    # 제자리 이동은 no-op → 방출 없음
+    bar._move_group("A", 0)
+    assert moved == []
+
+    # 실제 이동은 (group, old_index, new_index) 로 1회
+    bar._move_group("A", 2)
+    assert moved == [("A", 0, 2)]
+    assert bar.groupOrder() == ["B", "C", "A"]
+
+
+# ------------------------------------------------------------------ #
+# 닫기 X
+# ------------------------------------------------------------------ #
+def test_close_click_emits_correct_index(qapp):
+    bar = make_bar([("A", 3), ("B", 3)])
+    bar.setTabsClosable(True)
+    bar.show()
+    qapp.processEvents()
+    closed = []
+    bar.tabCloseRequested.connect(closed.append)
+
+    tgt = 2
+    c = bar._close_rect(bar._draw_rect(tgt)).center()
+    bar.mousePressEvent(mouse_event(QEvent.MouseButtonPress, c.x(), c.y()))
+    bar.mouseReleaseEvent(mouse_event(QEvent.MouseButtonRelease, c.x(), c.y()))
+    assert closed == [tgt]
+
+    # 누른 뒤 X 밖에서 떼면 방출되지 않아야 한다.
+    closed.clear()
+    br = bar.rect().bottomRight()
+    bar.mousePressEvent(mouse_event(QEvent.MouseButtonPress, c.x(), c.y()))
+    bar.mouseReleaseEvent(mouse_event(QEvent.MouseButtonRelease, br.x(), br.y()))
+    assert closed == []
+
+
+def test_close_hittest_tracks_visual_position_during_animation(qapp):
+    """과거 버그 회귀: 슬라이드 애니메이션 중 X 히트 테스트가 그려진(시각)
+    위치를 따라가야 한다. 논리 위치가 아니라."""
+    bar = make_bar([("A", 2), ("B", 2), ("C", 2)])
+    bar.setTabsClosable(True)
+    bar.show()
+    qapp.processEvents()
+
+    # 그룹 A 탭들에 오프셋을 강제로 걸어 '이동 중' 상태를 만든다.
+    off = 120
+    bar._start_slide({bar._uid(i): off for i in bar.groupTabIndices("A")})
+    bar._on_slide_anim(1.0)  # 오프셋 = base
+
+    i = 0
+    visual = bar._close_rect(bar._paint_rect(i)).center()
+    logical = bar._close_rect(bar._draw_rect(i)).center()
+    # 시각 위치는 논리 위치보다 off 만큼 오른쪽에 있어야 한다.
+    assert visual.x() - logical.x() == off
+    # 시각 위치를 클릭하면 해당 탭이 잡혀야 한다.
+    assert bar._close_index_at(visual) == i
+
+    # 정착(오프셋 정리) 후에는 논리 위치가 다시 잡혀야 한다.
+    bar._on_slide_anim_done()
+    assert bar._close_index_at(bar._close_rect(bar._draw_rect(i)).center()) == i
+
+
+# ------------------------------------------------------------------ #
+# 렌더링(스타일 3종) — 예외 없이 그려져야 한다
+# ------------------------------------------------------------------ #
+@pytest.mark.parametrize("style", [
+    GroupTabBar.STYLE_ROUNDED,
+    GroupTabBar.STYLE_LEFT_COLOR,
+    GroupTabBar.STYLE_PLAIN,
+])
+def test_paint_all_styles(qapp, style):
+    bar = make_bar([("A", 2), ("B", 3), ("C", 1)])
+    bar.setTabsClosable(True)
+    bar.setCurrentIndex(2)
+    bar.setGroupStyle(style)
+    bar.grab()  # 예외 없이 완료되면 성공
+
+
+def test_paint_empty_and_single(qapp):
+    empty = GroupTabBar()
+    empty.grab()
+    assert empty.currentGroup() is None
+    assert empty.setCurrentGroup("nope") is False
+    empty.nextGroup()  # 빈 상태에서 순환해도 안전
+    single = make_bar([("only", 1)])
+    single._move_group("only", 0)  # 단일 그룹 이동(무의미) 안전
+    single.grab()
+    assert is_contiguous(single)
+
+
+# ------------------------------------------------------------------ #
+# GroupTabWidget: 페이지-탭 동기화
+# ------------------------------------------------------------------ #
+def test_widget_page_tab_sync_after_moves(qapp):
+    w = GroupTabWidget()
+    w.resize(900, 300)
+    for g in range(6):
+        for k in range(random.Random(g).randint(1, 4)):
+            label = "G%d-%d" % (g, k)
+            page = QLabel(label)
+            page.setProperty("tag", label)
+            w.addGroupTab(page, label, g)
+
+    def synced():
+        return all(w.widget(i).property("tag") == w.tabText(i)
+                   for i in range(w.count()))
+
+    assert synced()
+    bar = w.tabBar()
+    rnd = random.Random(99)
+    for _ in range(100):
+        order = bar.groupOrder()
+        bar._move_group(rnd.choice(order), rnd.randint(0, len(order) - 1))
+        assert synced()
+
+
+def test_widget_signals_exposed(qapp):
+    w = GroupTabWidget()
+    assert hasattr(w, "groupMoved")
+    assert hasattr(w, "currentGroupChanged")
+    assert w.STYLE_ROUNDED == GroupTabBar.STYLE_ROUNDED
