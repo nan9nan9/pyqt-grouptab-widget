@@ -278,6 +278,62 @@ def test_widget_page_tab_sync_after_moves(qapp):
         assert synced()
 
 
+def test_icon_types(qapp):
+    """타입 기반 아이콘 API: 정적/애니메이션/해제 + GIF 자동 해제."""
+    bar = make_bar([("A", 3)])
+    assert bar.tabIcon(0).isNull()
+
+    # 정적: 진행(초록 세모), 색상 점
+    bar.setTabIconType(0, GroupTabBar.ICON_PROGRESS)
+    assert not bar.tabIcon(0).isNull()
+    bar.setTabIconType(0, GroupTabBar.ICON_COLOR, color="#ff0000")
+    assert not bar.tabIcon(0).isNull()
+
+    # 애니메이션(GIF): loading → tabMovie 존재
+    bar.setTabIconType(1, GroupTabBar.ICON_LOADING)
+    assert bar.tabMovie(1) is not None
+    # 진행으로 바꾸면 GIF 가 해제되어야 한다
+    bar.setTabIconType(1, GroupTabBar.ICON_PROGRESS)
+    assert bar.tabMovie(1) is None and not bar.tabIcon(1).isNull()
+
+    # 해제(none)
+    bar.setTabIconType(1, GroupTabBar.ICON_NONE)
+    assert bar.tabIcon(1).isNull()
+
+    # 알 수 없는 타입은 에러
+    with pytest.raises(ValueError):
+        bar.setTabIconType(0, "does-not-exist")
+
+
+def test_register_custom_icon_type(qapp):
+    """registerIconType 로 새 타입을 추가할 수 있다."""
+    from qtpy.QtGui import QIcon, QPixmap
+    def star_factory(bar, index, **kw):
+        pm = QPixmap(16, 16); pm.fill(Qt.red)
+        return QIcon(pm)
+    GroupTabBar.registerIconType("star", star_factory)
+    try:
+        bar = make_bar([("A", 1)])
+        bar.setTabIconType(0, "star")
+        assert not bar.tabIcon(0).isNull()
+        # 위젯에서도 공유 레지스트리로 사용 가능
+        from qtpy.QtWidgets import QLabel
+        w = GroupTabWidget()
+        w.addGroupTab(QLabel("s"), "s", "A")
+        w.setTabIconType(0, "star")
+        assert not w.tabBar().tabIcon(0).isNull()
+    finally:
+        GroupTabBar._ICON_FACTORIES.pop("star", None)
+
+
+def test_icon_type_via_widget(qapp):
+    from qtpy.QtWidgets import QLabel
+    w = GroupTabWidget()
+    w.addGroupTab(QLabel("p"), "p", "A")
+    w.setTabIconType(0, GroupTabWidget.ICON_PROGRESS)
+    assert not w.tabBar().tabIcon(0).isNull()
+
+
 def test_expanding_off_by_default(qapp):
     """확장 모드가 기본으로 꺼져 있어야 한다(수동 setExpanding 불필요).
 

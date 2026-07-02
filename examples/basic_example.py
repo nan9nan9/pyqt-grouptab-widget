@@ -18,7 +18,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QIcon, QPixmap, QColor, QPainter
+from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -44,19 +44,6 @@ GROUP_COLORS = [
 
 def _group_color(group):
     return QColor(GROUP_COLORS[(int(group) - 1) % len(GROUP_COLORS)])
-
-
-def _group_icon(group):
-    """그룹 색상의 원형 아이콘을 만든다."""
-    pm = QPixmap(16, 16)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    p.setBrush(_group_color(group))
-    p.setPen(Qt.NoPen)
-    p.drawEllipse(2, 2, 12, 12)
-    p.end()
-    return QIcon(pm)
 
 
 def _make_page(label, group):
@@ -101,7 +88,7 @@ class DemoWindow(QMainWindow):
             (2, "프로젝트 관리", "color"),
             (2, "설정", "gear"),
             (3, "Notifications", "loading"),
-            (3, "로그", "none"),
+            (3, "로그", "progress"),
             (3, "사용자 환경설정 페이지", "color"),
         ]
         for group, name, kind in samples:
@@ -159,7 +146,7 @@ class DemoWindow(QMainWindow):
         self.addToolBar(Qt.BottomToolBarArea, tb2)
         tb2.addWidget(QLabel(" 현재 탭 아이콘: "))
         for text, kind in [("색 점", "color"), ("Loading", "loading"),
-                           ("Gear", "gear"), ("없음", "none")]:
+                           ("Gear", "gear"), ("진행", "progress"), ("없음", "none")]:
             tb2.addWidget(self._btn(
                 text, lambda checked=False, k=kind: self._set_current_icon(k)))
 
@@ -175,14 +162,24 @@ class DemoWindow(QMainWindow):
     ]
 
     def _add_tab(self, name, group, kind="color"):
-        icon = _group_icon(group) if kind == "color" else None
-        idx = self.tabs.addGroupTab(_make_page(name, group), name, group, icon)
-        if kind == "loading":
-            self.tabs.setTabLoading(idx)
-        elif kind == "gear":
-            self.tabs.setTabGear(idx)
+        idx = self.tabs.addGroupTab(_make_page(name, group), name, group)
+        self._apply_icon(idx, kind, group)
         self.tabs.setCurrentIndex(idx)
         return idx
+
+    def _apply_icon(self, idx, kind, group=None):
+        """탭 아이콘을 타입(kind)으로 지정한다.
+
+        kind 문자열은 GroupTabWidget 의 ICON_* 타입 값과 동일하다.
+        색 점(color)만 그룹 색을 파라미터로 넘긴다.
+        """
+        if kind == GroupTabWidget.ICON_COLOR:
+            if group is None:
+                group = self.tabs.tabGroup(idx)
+            self.tabs.setTabIconType(idx, GroupTabWidget.ICON_COLOR,
+                                     color=_group_color(group))
+        else:
+            self.tabs.setTabIconType(idx, kind)   # loading / gear / progress / none
 
     def _on_add(self):
         name = self._NAME_POOL[self._tab_counter % len(self._NAME_POOL)]
@@ -205,19 +202,11 @@ class DemoWindow(QMainWindow):
         self.statusBar().showMessage("현재 그룹: {}".format(group))
 
     def _set_current_icon(self, kind):
-        """현재 탭의 아이콘을 없음/색 점/Loading GIF/Gear GIF 로 바꾼다."""
+        """현재 탭의 아이콘 타입을 바꾼다. (색 점/Loading/Gear/진행/없음)"""
         idx = self.tabs.currentIndex()
         if idx < 0:
             return
-        self.tabs.setTabMovie(idx, None)   # 진행 중인 GIF 가 있으면 해제
-        if kind == "color":
-            self.tabs.setTabIcon(idx, _group_icon(self.tabs.tabGroup(idx)))
-        elif kind == "none":
-            self.tabs.setTabIcon(idx, QIcon())
-        elif kind == "loading":
-            self.tabs.setTabLoading(idx)
-        elif kind == "gear":
-            self.tabs.setTabGear(idx)
+        self._apply_icon(idx, kind)
 
 
 def main():

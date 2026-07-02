@@ -24,6 +24,7 @@ from qtpy.QtGui import (
     QPainter,
     QPainterPath,
     QPen,
+    QPixmap,
 )
 from qtpy.QtWidgets import (
     QTabBar,
@@ -72,8 +73,22 @@ class GroupTabBar(QTabBar):
         "#e57373", "#64b5f6", "#81c784", "#ffb74d", "#ba68c8", "#4db6ac",
     )
 
+    # --- 탭 아이콘 타입 ---
+    # setTabIconType(index, type, **params) 로 지정한다. 타입은 레지스트리
+    # (_ICON_FACTORIES)에 등록된 팩토리로 확장 가능하다. (registerIconType)
+    ICON_NONE = "none"          # 아이콘 없음(해제)
+    ICON_COLOR = "color"        # 색상 점 (params: color)
+    ICON_PROGRESS = "progress"  # 진행(초록 세모, 재생) (params: color)
+    ICON_LOADING = "loading"    # 로딩 스피너 (GIF)
+    ICON_GEAR = "gear"          # 회전 톱니바퀴 (GIF)
+
+    # 타입 -> 팩토리 함수. 클래스 정의 뒤에서 기본 타입들을 채운다.
+    # factory(bar, index, **kwargs) -> QIcon | QMovie | 경로(str) | None
+    _ICON_FACTORIES = {}
+
     # --- 라벨 레이아웃 상수 (직접 그리기) ---
-    _LABEL_HMARGIN = 7      # 아이콘과 좌우 가장자리 사이 여백(px)
+    _LABEL_LMARGIN = 7      # 글자와 탭 왼쪽 가장자리 사이 여백(px)
+    _LABEL_RMARGIN = 9      # 글자와 탭 오른쪽(닫기 X 가 있으면 그 앞) 여백(px)
     _ICON_TEXT_GAP = 5      # 아이콘과 텍스트 사이 간격(px)
     _TEXT_PAD = 6           # 글자 잘림(생략) 방지용 여유 폭(px)
     _TEXT_VOFFSET = -1      # 글꼴 비대칭 보정: 텍스트를 살짝 위로(px)
@@ -381,13 +396,81 @@ class GroupTabBar(QTabBar):
             return
         self.setTabIcon(idx, QIcon(movie.currentPixmap()))
 
-    def setTabLoading(self, index):
-        """기본 제공 로딩 스피너(GIF)를 탭 아이콘으로 표시한다."""
-        self.setTabMovie(index, os.path.join(_ASSET_DIR, "loading.gif"))
+    def setTabIconType(self, index, icon_type, **params):
+        """탭 아이콘을 타입으로 지정한다. (타입별 setter 대신 하나의 진입점)
 
-    def setTabGear(self, index):
-        """기본 제공 회전 톱니바퀴(GIF)를 탭 아이콘으로 표시한다."""
-        self.setTabMovie(index, os.path.join(_ASSET_DIR, "gear.gif"))
+        예:
+            bar.setTabIconType(i, GroupTabBar.ICON_PROGRESS)          # 초록 세모
+            bar.setTabIconType(i, GroupTabBar.ICON_COLOR, color="#f00")
+            bar.setTabIconType(i, GroupTabBar.ICON_LOADING)           # GIF
+            bar.setTabIconType(i, GroupTabBar.ICON_NONE)              # 해제
+
+        타입은 registerIconType() 로 얼마든지 추가할 수 있다. 각 팩토리는
+        QIcon(정적) / QMovie·경로(str, 애니메이션) / None(해제) 중 하나를 반환한다.
+        """
+        try:
+            factory = self._ICON_FACTORIES[icon_type]
+        except KeyError:
+            raise ValueError(
+                "알 수 없는 아이콘 타입 %r. 사용 가능: %s"
+                % (icon_type, sorted(self._ICON_FACTORIES))
+            )
+        result = factory(self, index, **params)
+        if result is None:
+            self.setTabMovie(index, None)                 # 아이콘 해제
+        elif isinstance(result, QIcon):
+            self.setTabMovie(index, None)                 # 진행 중 GIF 해제 후
+            self.setTabIcon(index, result)                # 정적 아이콘 설정
+        elif isinstance(result, (QMovie, str)):
+            self.setTabMovie(index, result)               # 애니메이션 아이콘
+        else:
+            raise TypeError(
+                "아이콘 팩토리는 QIcon/QMovie/경로(str)/None 을 반환해야 합니다: %r"
+                % (result,)
+            )
+
+    @classmethod
+    def registerIconType(cls, name, factory):
+        """새 아이콘 타입을 등록한다. (또는 기존 타입 교체)
+
+        Args:
+            name: 타입 이름(문자열).
+            factory: factory(bar, index, **params) 를 호출해 아이콘을 만든다.
+                반환값은 QIcon(정적) / QMovie·경로(str, 애니메이션) / None(해제).
+        """
+        cls._ICON_FACTORIES[name] = factory
+
+    # --- 기본 제공 아이콘을 코드로 그리는 헬퍼 (정적) ---
+    @staticmethod
+    def _make_progress_icon(size=32, color="#2e7d32"):
+        """오른쪽을 가리키는 초록색 세모(진행/재생) 아이콘."""
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        m = size * 0.18                     # 가장자리 여백
+        path = QPainterPath()
+        path.moveTo(m, m)                   # 좌상
+        path.lineTo(m, size - m)            # 좌하
+        path.lineTo(size - m, size / 2.0)   # 우측 중앙
+        path.closeSubpath()
+        p.fillPath(path, QColor(color))
+        p.end()
+        return QIcon(pm)
+
+    @staticmethod
+    def _make_dot_icon(color="#4C8BF5", size=32):
+        """단색 원형(색상 표시) 아이콘."""
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(color))
+        m = int(size * 0.12)
+        p.drawEllipse(m, m, size - 2 * m, size - 2 * m)
+        p.end()
+        return QIcon(pm)
 
     def setTabsClosable(self, closable):
         """닫기 버튼(X) 표시를 켜고 끈다.
@@ -715,7 +798,8 @@ class GroupTabBar(QTabBar):
         reserve = self._close_reserve(index)
         # 글자 폭에 약간의 여유(_TEXT_PAD)를 둬서 폰트/DPI 차이로 마지막
         # 글자가 잘려 '...' 로 생략되는 것을 막는다.
-        size.setWidth(iw + gap + tw + self._TEXT_PAD + 2 * self._LABEL_HMARGIN + reserve)
+        size.setWidth(iw + gap + tw + self._TEXT_PAD
+                      + self._LABEL_LMARGIN + self._LABEL_RMARGIN + reserve)
         # 선택 그룹을 더 올릴 수 있도록 위쪽 여백만큼 바 높이를 키운다.
         size.setHeight(size.height() + self._group_raise)
         return size
@@ -863,22 +947,25 @@ class GroupTabBar(QTabBar):
         ih = isize.height() if has_icon else 0
         gap = self._ICON_TEXT_GAP if has_icon else 0
 
-        # 닫기 X 영역(오른쪽)을 제외한 부분에 아이콘+텍스트를 배치한다.
+        # 닫기 X 영역(오른쪽)을 제외한 뒤, 좌/우 여백만큼 안쪽으로 들여
+        # 아이콘+텍스트를 배치한다. (좌우 여백을 다르게 줄 수 있다.)
         reserve = self._close_reserve(index)
         if reserve:
             rect = rect.adjusted(0, 0, -reserve, 0)
+        inner = rect.adjusted(self._LABEL_LMARGIN, 0, -self._LABEL_RMARGIN, 0)
 
-        avail = rect.width() - iw - gap - 2 * self._LABEL_HMARGIN
-        avail = max(0, avail)
+        avail = max(0, inner.width() - iw - gap)
         elided = fm.elidedText(text, Qt.ElideRight, avail)
         if hasattr(fm, "horizontalAdvance"):
             tw = fm.horizontalAdvance(elided)
         else:
             tw = fm.width(elided)
 
+        # 안쪽 영역 중앙에 배치 → 좌측은 최소 _LABEL_LMARGIN, 우측은 최소
+        # _LABEL_RMARGIN 이 유지된다. (여유가 있으면 양쪽에 고르게 분배)
         total = iw + gap + tw
-        x = rect.left() + (rect.width() - total) // 2
-        x = max(x, rect.left() + self._LABEL_HMARGIN)
+        x = inner.left() + (inner.width() - total) // 2
+        x = max(x, inner.left())
         cy = rect.center().y()
 
         if has_icon:
@@ -1118,3 +1205,22 @@ class GroupTabBar(QTabBar):
                 self._draw_close_button(painter, label_rect, i)
 
         painter.end()
+
+
+# ------------------------------------------------------------------ #
+# 기본 제공 아이콘 타입 등록
+#   각 팩토리는 factory(bar, index, **params) 형태이며,
+#   QIcon(정적) / 경로(str)·QMovie(애니메이션) / None(해제) 을 반환한다.
+#   registerIconType() 로 사용자가 새 타입을 얼마든지 추가할 수 있다.
+# ------------------------------------------------------------------ #
+GroupTabBar._ICON_FACTORIES.update({
+    GroupTabBar.ICON_NONE: lambda bar, index, **kw: None,
+    GroupTabBar.ICON_COLOR:
+        lambda bar, index, color="#4C8BF5", **kw: GroupTabBar._make_dot_icon(color),
+    GroupTabBar.ICON_PROGRESS:
+        lambda bar, index, color="#2e7d32", **kw: GroupTabBar._make_progress_icon(color=color),
+    GroupTabBar.ICON_LOADING:
+        lambda bar, index, **kw: os.path.join(_ASSET_DIR, "loading.gif"),
+    GroupTabBar.ICON_GEAR:
+        lambda bar, index, **kw: os.path.join(_ASSET_DIR, "gear.gif"),
+})

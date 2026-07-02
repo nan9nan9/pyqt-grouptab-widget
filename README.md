@@ -12,7 +12,8 @@
 
 - ✅ **PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환** (`qtpy` 사용)
 - ✅ `QTabBar` / `QTabWidget` 기반 — 기본 탭 모양 유지
-- ✅ 탭 아이콘 지원: **이미지 / 색 점 / 기본 제공 Loading·Gear / 사용자 GIF**
+- ✅ 탭 아이콘을 **타입으로 지정**(`setTabIconType`): 색 점 / 진행(초록 세모) /
+  Loading / Gear / 없음 — `registerIconType()` 로 **커스텀 타입 확장 가능**
 - ✅ **닫기 버튼**(`setTabsClosable(True)`) 지원 — 라벨과 겹치지 않게 공간 자동 확보
 - ✅ 그룹에 탭 추가 시 해당 그룹 블록의 **마지막 순서**에 삽입
 - ✅ 드래그 시 그룹이 **블록 단위로 함께 이동** — 잡은 그룹이 네이티브
@@ -56,15 +57,15 @@ QT_API=pyqt6   python examples/basic_example.py
 QT_API=pyside6 python examples/basic_example.py
 ```
 
-데모에는 그룹별 색상 아이콘 / 아이콘 없는 탭 / **애니메이션 GIF 아이콘**이
-섞여 있고, "현재 탭 아이콘" 버튼(색 점 / Loading / Gear / 없음)으로 바로
-바꿔볼 수 있습니다. 그룹 전환 버튼(◀ 그룹 / 그룹 ▶), 상단 액센트 바 토글,
+데모에는 그룹별 색 점 / 아이콘 없는 탭 / **애니메이션 GIF** / **진행(초록 세모)**
+아이콘이 섞여 있고, "현재 탭 아이콘" 버튼(색 점 / Loading / Gear / 진행 / 없음)으로
+바로 바꿔볼 수 있습니다. 그룹 전환 버튼(◀ 그룹 / 그룹 ▶), 상단 액센트 바 토글,
 **그룹 모양 선택 콤보**(라운딩 / 왼쪽 색상 / 네이티브), **이동 애니메이션 토글**도
 있습니다.
 
 기본 제공 GIF(`loading.gif` 회전 스피너, `gear.gif` 회전 톱니바퀴)는
-패키지(`src/grouptab/assets/`)에 포함되어 있어 `setTabLoading()` / `setTabGear()`
-로 바로 사용할 수 있습니다.
+패키지(`src/grouptab/assets/`)에 포함되어 `setTabIconType(i, GroupTabWidget.ICON_LOADING)`
+등으로 바로 사용할 수 있습니다.
 
 ## 사용법
 
@@ -87,15 +88,24 @@ from qtpy.QtGui import QIcon
 tabs.addGroupTab(QLabel("페이지5"), "Tab5", 2, QIcon("icon.png"))
 # 또는 나중에: tabs.setTabIcon(index, QIcon("icon.png"))
 
-# 기본 제공 애니메이션 아이콘 (한 줄)
-tabs.setTabLoading(0)   # 회전 스피너
-tabs.setTabGear(1)      # 회전 톱니바퀴
+# 아이콘은 "타입"으로 지정한다 (setTabIconType). 타입별 setter 를 따로 두지 않는다.
+tabs.setTabIconType(0, GroupTabWidget.ICON_PROGRESS)          # 진행(초록 세모)
+tabs.setTabIconType(1, GroupTabWidget.ICON_COLOR, color="#f00")  # 색 점(색 지정)
+tabs.setTabIconType(2, GroupTabWidget.ICON_LOADING)          # 로딩 스피너(GIF)
+tabs.setTabIconType(3, GroupTabWidget.ICON_GEAR)             # 톱니바퀴(GIF)
+tabs.setTabIconType(0, GroupTabWidget.ICON_NONE)            # 해제
 
-# 사용자 지정 애니메이션(GIF) 아이콘 — QMovie 또는 파일 경로
+# 새 아이콘 타입을 등록해서 확장할 수 있다.
+#   factory(bar, index, **params) -> QIcon(정적) / QMovie·경로(str, 애니메이션) / None
+from qtpy.QtGui import QIcon, QPixmap
+def _star(bar, index, **kw):
+    pm = QPixmap(16, 16); pm.fill(Qt.red); return QIcon(pm)
+GroupTabWidget.registerIconType("star", _star)
+tabs.setTabIconType(1, "star")
+
+# 사용자 지정 애니메이션(GIF) 은 setTabMovie 로도 직접 설정 가능
 from qtpy.QtGui import QMovie
-tabs.setTabMovie(2, "anim.gif")           # 경로
-tabs.setTabMovie(2, QMovie("anim.gif"))   # QMovie
-tabs.setTabMovie(2, None)                  # 해제
+tabs.setTabMovie(2, "anim.gif")           # 경로 또는 QMovie, None 이면 해제
 
 # 닫기 버튼
 tabs.setTabsClosable(True)
@@ -161,7 +171,8 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `setGroupStyle(style)` / `groupStyle()` | 그룹 모양: `STYLE_ROUNDED` / `STYLE_LEFT_COLOR` / `STYLE_PLAIN` |
 | `setGroupColor(group, color)` | `STYLE_LEFT_COLOR` 에서 그룹별 마커 색 지정 (None 이면 기본색 순환) |
 | `setGroupMoveAnimationEnabled(bool)` / `groupMoveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
-| `setTabLoading(index)` / `setTabGear(index)` | 기본 제공 애니메이션 아이콘(회전 스피너/톱니바퀴) |
+| `setTabIconType(index, type, **params)` | 탭 아이콘을 타입으로 지정 (`ICON_NONE`/`ICON_COLOR`/`ICON_PROGRESS`/`ICON_LOADING`/`ICON_GEAR`) |
+| `registerIconType(name, factory)` | 커스텀 아이콘 타입 등록 (`factory(bar, index, **params)` → QIcon/QMovie/경로/None) |
 | `setTabMovie(index, movie)` / `tabMovie(index)` | 탭에 사용자 지정 애니메이션(GIF) 아이콘 설정/조회 (`None`이면 해제) |
 | `setTopAccentEnabled(bool)` / `topAccentEnabled()` | 상단 액센트 바 on/off (기본 on) |
 | `setTopAccentColor(color)` | 액센트 바 색상 (None 이면 팔레트 highlight) |

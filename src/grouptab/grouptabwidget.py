@@ -36,6 +36,13 @@ class GroupTabWidget(QTabWidget):
     STYLE_LEFT_COLOR = GroupTabBar.STYLE_LEFT_COLOR
     STYLE_PLAIN = GroupTabBar.STYLE_PLAIN
 
+    # 탭 아이콘 타입 (GroupTabBar 의 것을 그대로 노출).
+    ICON_NONE = GroupTabBar.ICON_NONE
+    ICON_COLOR = GroupTabBar.ICON_COLOR
+    ICON_PROGRESS = GroupTabBar.ICON_PROGRESS
+    ICON_LOADING = GroupTabBar.ICON_LOADING
+    ICON_GEAR = GroupTabBar.ICON_GEAR
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._bar = GroupTabBar(self)
@@ -190,13 +197,18 @@ class GroupTabWidget(QTabWidget):
         """해당 탭에 설정된 QMovie 를 반환한다. (없으면 None)"""
         return self._bar.tabMovie(index)
 
-    def setTabLoading(self, index):
-        """기본 제공 로딩 스피너(GIF)를 탭 아이콘으로 표시한다."""
-        self._bar.setTabLoading(index)
+    def setTabIconType(self, index, icon_type, **params):
+        """탭 아이콘을 타입으로 지정한다.
 
-    def setTabGear(self, index):
-        """기본 제공 회전 톱니바퀴(GIF)를 탭 아이콘으로 표시한다."""
-        self._bar.setTabGear(index)
+        ICON_NONE / ICON_COLOR / ICON_PROGRESS / ICON_LOADING / ICON_GEAR 등.
+        타입은 registerIconType() 로 확장 가능하다.
+        """
+        self._bar.setTabIconType(index, icon_type, **params)
+
+    @staticmethod
+    def registerIconType(name, factory):
+        """새 아이콘 타입을 등록한다. (GroupTabBar 와 공유)"""
+        GroupTabBar.registerIconType(name, factory)
 
     def setTopAccentEnabled(self, enabled):
         """선택된 그룹 탭 윗부분의 액센트 바 표시 여부를 설정한다."""
