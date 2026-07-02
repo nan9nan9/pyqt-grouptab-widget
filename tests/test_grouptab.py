@@ -278,6 +278,27 @@ def test_widget_page_tab_sync_after_moves(qapp):
         assert synced()
 
 
+def test_expanding_off_by_default(qapp):
+    """확장 모드가 기본으로 꺼져 있어야 한다(수동 setExpanding 불필요).
+
+    확장되면 탭 폭이 바 너비에 맞춰 늘어나 그룹 블록/드래그 좌표가 어긋난다.
+    QTabWidget.setTabBar() 가 확장을 되살리므로 위젯 쪽도 확인한다.
+    """
+    bar = make_bar([("A", 2), ("B", 2)])
+    bar.show()
+    qapp.processEvents()
+    assert bar.expanding() is False
+    # 실제 탭 폭이 선호 폭(tabSizeHint)과 같아야 한다(늘어나지 않음).
+    for i in range(bar.count()):
+        assert bar.tabRect(i).width() == bar.tabSizeHint(i).width()
+
+    w = GroupTabWidget()
+    from qtpy.QtWidgets import QLabel
+    w.addGroupTab(QLabel("A0"), "A0", "A")
+    w.addGroupTab(QLabel("B0"), "B0", "B")
+    assert w.tabBar().expanding() is False
+
+
 def test_widget_signals_exposed(qapp):
     w = GroupTabWidget()
     assert hasattr(w, "groupMoved")
@@ -336,3 +357,55 @@ def test_remove_group_and_group_tab(qapp):
     bar.addGroupTab("a", 1); bar.addGroupTab("b", 1); bar.addGroupTab("c", 2)
     assert bar.removeGroup(1) == 2
     assert bar.count() == 1 and bar.groupOrder() == [2]
+
+
+# ------------------------------------------------------------------ #
+# 탭별 닫기 버튼 표시/숨김
+# ------------------------------------------------------------------ #
+def test_per_tab_close_button_visibility(qapp):
+    bar = make_bar([("A", 3), ("B", 3)])
+
+    # 전역 off → 어떤 탭도 X 안 보임
+    assert not any(bar.isTabCloseButtonVisible(i) for i in range(bar.count()))
+
+    bar.setTabsClosable(True)
+    # 전역 on → 기본 모두 표시
+    assert all(bar.isTabCloseButtonVisible(i) for i in range(bar.count()))
+
+    # 탭 2 숨김: 해당 탭만 숨겨지고 폭(예약)이 줄어든다.
+    w_before = bar.tabSizeHint(2).width()
+    bar.setTabCloseButtonVisible(2, False)
+    assert not bar.isTabCloseButtonVisible(2)
+    assert all(bar.isTabCloseButtonVisible(i) for i in (0, 1, 3, 4, 5))
+    assert bar.tabSizeHint(2).width() < w_before
+
+    # 히트 테스트: 숨긴 탭의 X 위치는 잡히지 않고, 보이는 탭은 잡힌다.
+    assert bar._close_index_at(bar._close_rect(bar._draw_rect(2)).center()) == -1
+    assert bar._close_index_at(bar._close_rect(bar._draw_rect(1)).center()) == 1
+
+    # 다시 표시
+    bar.setTabCloseButtonVisible(2, True)
+    assert bar.isTabCloseButtonVisible(2)
+
+
+def test_per_tab_close_hidden_survives_move(qapp):
+    """탭별 숨김 설정은 uid 로 추적되어 그룹 이동 후에도 유지된다."""
+    bar = make_bar([("A", 2), ("B", 2)])
+    bar.setTabsClosable(True)
+    bar.setTabCloseButtonVisible(0, False)
+    uid = bar._uid(0)
+    bar._move_group("A", 1)  # A 를 뒤로 → 인덱스가 바뀐다
+    new_index = bar._index_of_uid(uid)
+    assert new_index != 0
+    assert not bar.isTabCloseButtonVisible(new_index)
+
+
+def test_per_tab_close_via_widget(qapp):
+    from qtpy.QtWidgets import QLabel
+    w = GroupTabWidget()
+    w.addGroupTab(QLabel("A0"), "A0", "A")
+    w.addGroupTab(QLabel("A1"), "A1", "A")
+    w.setTabsClosable(True)
+    w.setTabCloseButtonVisible(1, False)
+    assert w.isTabCloseButtonVisible(0)
+    assert not w.isTabCloseButtonVisible(1)

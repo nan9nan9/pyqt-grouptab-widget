@@ -40,6 +40,10 @@ class GroupTabWidget(QTabWidget):
         super().__init__(parent)
         self._bar = GroupTabBar(self)
         self.setTabBar(self._bar)
+        # QTabWidget.setTabBar() 가 확장 모드를 기본(True)으로 되돌리므로,
+        # 그 뒤에 다시 꺼서 별도 설정 없이도 정상 동작하게 한다.
+        # (확장되면 탭 폭이 늘어나 커스텀 그리기/드래그 좌표가 어긋난다.)
+        self._bar.setExpanding(False)
         # 그룹 관련 시그널을 그대로 노출한다.
         self.groupMoved = self._bar.groupMoved
         self.currentGroupChanged = self._bar.currentGroupChanged
@@ -61,6 +65,17 @@ class GroupTabWidget(QTabWidget):
         (super)은 호출하지 않고, 직접 그리는 바의 설정만 켠다.
         """
         self._bar.setTabsClosable(closable)
+
+    def setTabCloseButtonVisible(self, index, visible):
+        """특정 탭의 닫기 X 표시 여부를 설정한다.
+
+        전역 setTabsClosable(True) 상태에서 탭마다 X 를 숨기거나 보이게 한다.
+        """
+        self._bar.setTabCloseButtonVisible(index, visible)
+
+    def isTabCloseButtonVisible(self, index):
+        """해당 탭의 닫기 X 가 실제로 보이는지 반환한다."""
+        return self._bar.isTabCloseButtonVisible(index)
 
     def addGroupTab(self, widget, label, group, icon=None):
         """주어진 그룹의 마지막 순서에 (위젯, 라벨) 탭을 추가한다.

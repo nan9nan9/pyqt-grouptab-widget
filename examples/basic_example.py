@@ -82,8 +82,8 @@ class DemoWindow(QMainWindow):
         self._tab_counter = 0
 
         # 실제 앱과 동일하게 GroupTabWidget 을 centralWidget 으로 등록한다.
+        # (setExpanding(False) 는 GroupTabBar 기본값이라 별도 호출이 필요 없다.)
         self.tabs = GroupTabWidget()
-        self.tabs.tabBar().setExpanding(False)
         self.tabs.tabCloseRequested.connect(self.tabs.removeTab)
         self.setCentralWidget(self.tabs)
 

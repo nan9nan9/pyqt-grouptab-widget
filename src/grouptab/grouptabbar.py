@@ -142,6 +142,9 @@ class GroupTabBar(QTabBar):
         self._closable = False
         self._close_press_index = -1   # 닫기 X 를 누른 탭
         self._close_hover_index = -1   # 닫기 X 위에 커서가 있는 탭
+        # 탭별로 닫기 X 를 숨긴 uid 집합. (전역 _closable 이 켜져 있어도 여기
+        #  포함된 탭은 X 를 그리지 않는다. 기본은 모두 표시.)
+        self._close_hidden_uids = set()
 
         # 그룹 전환 상태
         self._current_group = None
@@ -154,6 +157,11 @@ class GroupTabBar(QTabBar):
         # 드래그는 전부 우리가 직접(커서 추적) 처리하므로 네이티브 이동은 끈다.
         self.setMovable(False)
         self.setDrawBase(False)
+        # 탭 폭을 바 너비에 맞춰 늘리는 확장 모드는 끈다. (기본값 True)
+        # 우리는 tabSizeHint 의 자연 폭을 전제로 그룹 블록·라벨·닫기 X 위치와
+        # 드래그 좌표를 계산하므로, 확장으로 폭이 늘어나면 그리기/드래그가
+        # 어긋난다. 기본으로 꺼서 별도 설정 없이 정상 동작하게 한다.
+        self.setExpanding(False)
         # 닫기 X hover 효과를 위해 마우스 추적을 켠다.
         self.setMouseTracking(True)
 
@@ -395,8 +403,29 @@ class GroupTabBar(QTabBar):
         self.update()
 
     def tabsClosable(self):
-        """닫기 버튼(X) 표시 여부."""
+        """닫기 버튼(X) 전역 표시 여부."""
         return self._closable
+
+    def setTabCloseButtonVisible(self, index, visible):
+        """특정 탭의 닫기 X 표시 여부를 설정한다.
+
+        전역 setTabsClosable(True) 가 켜진 상태에서, 이 값으로 탭마다 X 를
+        숨기거나 다시 보이게 할 수 있다. (기본: 모든 탭 표시)
+        숨긴 탭은 X 용 여백도 확보하지 않아 라벨이 그만큼 넓게 쓰인다.
+        """
+        uid = self._uid(index)
+        if uid is None:
+            return
+        if visible:
+            self._close_hidden_uids.discard(uid)
+        else:
+            self._close_hidden_uids.add(uid)
+        self.relayoutTabs()   # 폭(tabSizeHint)이 바뀌므로 레이아웃 재계산
+        self.update()
+
+    def isTabCloseButtonVisible(self, index):
+        """해당 탭의 닫기 X 가 실제로 보이는지 반환한다. (전역+탭별 반영)"""
+        return self._tab_close_visible(index)
 
     def relayoutTabs(self):
         """QTabBar 의 탭 레이아웃을 강제로 다시 계산하게 한다.
@@ -479,9 +508,15 @@ class GroupTabBar(QTabBar):
         f.setBold(True)
         return f
 
-    def _close_reserve(self):
-        """닫기 X 가 라벨 오른쪽에서 차지할 폭(px). (닫기 꺼져 있으면 0)"""
+    def _tab_close_visible(self, index):
+        """해당 탭에 닫기 X 가 실제로 보이는지 (전역 스위치 + 탭별 설정)."""
         if not self._closable:
+            return False
+        return self._uid(index) not in self._close_hidden_uids
+
+    def _close_reserve(self, index):
+        """닫기 X 가 라벨 오른쪽에서 차지할 폭(px). (표시 안 하면 0)"""
+        if not self._tab_close_visible(index):
             return 0
         return self._CLOSE_SIZE + self._ICON_TEXT_GAP
 
@@ -676,8 +711,8 @@ class GroupTabBar(QTabBar):
             tw = fm.width(text)
         iw = self.iconSize().width() if not self.tabIcon(index).isNull() else 0
         gap = self._ICON_TEXT_GAP if iw else 0
-        # 닫기 X 가 켜져 있으면 그만큼 폭을 더 확보한다.
-        reserve = self._close_reserve()
+        # 닫기 X 가 켜져 있으면 그만큼 폭을 더 확보한다. (탭별 표시 여부 반영)
+        reserve = self._close_reserve(index)
         # 글자 폭에 약간의 여유(_TEXT_PAD)를 둬서 폰트/DPI 차이로 마지막
         # 글자가 잘려 '...' 로 생략되는 것을 막는다.
         size.setWidth(iw + gap + tw + self._TEXT_PAD + 2 * self._LABEL_HMARGIN + reserve)
@@ -703,11 +738,13 @@ class GroupTabBar(QTabBar):
         # 일반 상황에서는 tabAt 로 O(1) 처리한다.
         if self._anim_offsets or (self._drag_active and self._drag_offset):
             for i in range(self.count()):
-                if self._close_rect(self._paint_rect(i)).contains(pos):
+                if (self._tab_close_visible(i)
+                        and self._close_rect(self._paint_rect(i)).contains(pos)):
                     return i
             return -1
         idx = self.tabAt(pos)
-        if idx != -1 and self._close_rect(self._draw_rect(idx)).contains(pos):
+        if (idx != -1 and self._tab_close_visible(idx)
+                and self._close_rect(self._draw_rect(idx)).contains(pos)):
             return idx
         return -1
 
@@ -827,7 +864,7 @@ class GroupTabBar(QTabBar):
         gap = self._ICON_TEXT_GAP if has_icon else 0
 
         # 닫기 X 영역(오른쪽)을 제외한 부분에 아이콘+텍스트를 배치한다.
-        reserve = self._close_reserve()
+        reserve = self._close_reserve(index)
         if reserve:
             rect = rect.adjusted(0, 0, -reserve, 0)
 
@@ -1076,7 +1113,8 @@ class GroupTabBar(QTabBar):
             self._draw_tab_label(painter, label_rect, i, font, fm, i == selected)
 
             # 닫기 X 를 (자식 위젯이 아니라) 직접 그린다 → z-order 충돌 없음.
-            if self._closable:
+            # 전역 스위치가 켜져 있고 그 탭이 숨김 대상이 아닐 때만 그린다.
+            if self._tab_close_visible(i):
                 self._draw_close_button(painter, label_rect, i)
 
         painter.end()
