@@ -87,7 +87,7 @@ class GroupTabBar(QTabBar):
     _ICON_FACTORIES = {}
 
     # --- 라벨 레이아웃 상수 (직접 그리기) ---
-    _LABEL_LMARGIN = 7      # 글자와 탭 왼쪽 가장자리 사이 여백(px)
+    _LABEL_LMARGIN = 5      # 글자와 탭 왼쪽 가장자리 사이 여백(px)
     _LABEL_RMARGIN = 9      # 글자와 탭 오른쪽(닫기 X 가 있으면 그 앞) 여백(px)
     _ICON_TEXT_GAP = 5      # 아이콘과 텍스트 사이 간격(px)
     _TEXT_PAD = 6           # 글자 잘림(생략) 방지용 여유 폭(px)
