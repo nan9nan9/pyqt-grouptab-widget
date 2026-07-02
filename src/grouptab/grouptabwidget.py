@@ -10,6 +10,11 @@ QTabWidget 처럼 탭마다 위젯(페이지)을 등록할 수 있으면서, 탭
 - 드래그 시 그룹이 블록 단위로 함께 이동 (페이지도 함께 이동)
 - 선택된 그룹의 탭을 살짝 올리고 굵은 글씨로 강조
 
+그룹 무결성을 위해 탭 추가/삽입은 반드시 addGroupTab()/insertGroupTab() 로만
+해야 한다. 상속된 QTabWidget.addTab()/insertTab() 을 직접 호출하면 그룹 태그가
+없는 탭이 생겨 그룹 모델이 깨지므로, 이 두 메서드는 막혀 있다(RuntimeError).
+제거는 removeTab()/removeGroupTab()(단일 탭) 또는 removeGroup()(그룹 전체)을 쓴다.
+
 PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환된다. (qtpy 사용)
 """
 
@@ -79,14 +84,48 @@ class GroupTabWidget(QTabWidget):
         Returns:
             int: 새로 추가된 탭의 인덱스.
         """
-        # QTabWidget.insertTab 이 탭(탭 바)과 페이지(스택)를 함께 추가한다.
+        # QTabWidget.insertTab(super)이 탭(탭 바)과 페이지(스택)를 함께 추가한다.
+        # self.insertTab 은 그룹 우회 방지용으로 막혀 있으므로 super 로 호출한다.
         if icon is not None:
-            idx = self.insertTab(index, widget, icon, label)
+            idx = super().insertTab(index, widget, icon, label)
         else:
-            idx = self.insertTab(index, widget, label)
+            idx = super().insertTab(index, widget, label)
         # 추가된 탭에 그룹 정보를 부여한다.
         self._bar.tagTab(idx, group)
         return idx
+
+    def removeGroupTab(self, index):
+        """해당 탭과 페이지를 제거한다. (removeTab 과 동일; 그룹 API 대칭용)"""
+        self.removeTab(index)
+
+    def removeGroup(self, group):
+        """해당 그룹의 모든 탭(과 페이지)을 제거한다.
+
+        Returns:
+            int: 제거된 탭 수.
+        """
+        indices = self._bar.groupTabIndices(group)
+        # 인덱스가 밀리지 않도록 뒤에서부터 제거한다. (페이지도 함께 제거되도록
+        # 바가 아니라 QTabWidget.removeTab 을 쓴다.)
+        for i in reversed(indices):
+            self.removeTab(i)
+        return len(indices)
+
+    # --- 그룹 우회 방지: 태그 없는 탭이 생기지 않도록 네이티브 추가 API를 막는다.
+    def addTab(self, *args, **kwargs):
+        """(막힘) 그룹 정보 없는 탭을 만들 수 있어 사용을 금지한다."""
+        raise RuntimeError(
+            "GroupTabWidget 에서는 addTab() 을 직접 사용할 수 없습니다. "
+            "그룹 태그 없는 탭이 생겨 그룹 무결성이 깨집니다. "
+            "addGroupTab(widget, label, group[, icon]) 을 사용하세요."
+        )
+
+    def insertTab(self, *args, **kwargs):
+        """(막힘) 그룹 정보 없는 탭을 만들 수 있어 사용을 금지한다."""
+        raise RuntimeError(
+            "GroupTabWidget 에서는 insertTab() 을 직접 사용할 수 없습니다. "
+            "insertGroupTab(index, widget, label, group[, icon]) 을 사용하세요."
+        )
 
     # ------------------------------------------------------------------ #
     # GroupTabBar 로의 편의 위임

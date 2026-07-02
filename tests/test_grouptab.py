@@ -283,3 +283,56 @@ def test_widget_signals_exposed(qapp):
     assert hasattr(w, "groupMoved")
     assert hasattr(w, "currentGroupChanged")
     assert w.STYLE_ROUNDED == GroupTabBar.STYLE_ROUNDED
+
+
+# ------------------------------------------------------------------ #
+# 그룹 우회 방지: 그룹 관리는 전용 API 로만
+# ------------------------------------------------------------------ #
+def test_widget_raw_add_insert_blocked(qapp):
+    from qtpy.QtWidgets import QWidget
+    w = GroupTabWidget()
+    # 전용 API 는 가드가 있어도 정상 동작해야 한다(내부는 super 경로).
+    w.addGroupTab(QLabel("A0"), "A0", "A")
+    w.insertGroupTab(0, QLabel("A1"), "A1", "A")
+    assert w.count() == 2 and w.tabGroup(0) == "A"
+    # 네이티브 addTab/insertTab 직접 호출은 막혀야 한다.
+    with pytest.raises(RuntimeError):
+        w.addTab(QWidget(), "raw")
+    with pytest.raises(RuntimeError):
+        w.insertTab(0, QWidget(), "raw")
+
+
+def test_bar_raw_add_insert_blocked(qapp):
+    bar = GroupTabBar()
+    bar.addGroupTab("x", 1)
+    assert bar.count() == 1
+    with pytest.raises(RuntimeError):
+        bar.addTab("raw")
+    with pytest.raises(RuntimeError):
+        bar.insertTab(0, "raw")
+
+
+def test_remove_group_and_group_tab(qapp):
+    w = GroupTabWidget()
+    for g in ("A", "B", "C"):
+        for k in range(2):
+            page = QLabel("%s%d" % (g, k))
+            page.setProperty("tag", "%s%d" % (g, k))
+            w.addGroupTab(page, "%s%d" % (g, k), g)
+    assert w.count() == 6
+    # removeGroup: 그룹 전체 제거 + 페이지 동기화 유지
+    removed = w.removeGroup("B")
+    assert removed == 2
+    assert w.count() == 4
+    assert "B" not in w.groupOrder()
+    assert all(w.widget(i).property("tag") == w.tabText(i) for i in range(w.count()))
+    # removeGroupTab: 단일 탭 제거
+    before = w.count()
+    w.removeGroupTab(0)
+    assert w.count() == before - 1
+
+    # 바 단독 removeGroup
+    bar = GroupTabBar()
+    bar.addGroupTab("a", 1); bar.addGroupTab("b", 1); bar.addGroupTab("c", 2)
+    assert bar.removeGroup(1) == 2
+    assert bar.count() == 1 and bar.groupOrder() == [2]

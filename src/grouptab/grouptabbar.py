@@ -188,12 +188,42 @@ class GroupTabBar(QTabBar):
         Returns:
             int: 새로 추가된 탭의 인덱스.
         """
+        # 그룹 태깅과 함께 추가해야 하므로 네이티브 insertTab(super)을 쓴다.
+        # (self.insertTab 는 그룹 우회 방지용으로 막혀 있다 → _guard_native_tab)
         if icon is not None:
-            idx = self.insertTab(index, icon, text)
+            idx = super().insertTab(index, icon, text)
         else:
-            idx = self.insertTab(index, text)
+            idx = super().insertTab(index, text)
         self.tagTab(idx, group)
         return idx
+
+    def removeGroup(self, group):
+        """해당 그룹에 속한 모든 탭을 제거한다.
+
+        Returns:
+            int: 제거된 탭 수.
+        """
+        indices = self.groupTabIndices(group)
+        # 인덱스가 밀리지 않도록 뒤에서부터 제거한다.
+        for i in reversed(indices):
+            self.removeTab(i)
+        return len(indices)
+
+    # --- 그룹 우회 방지: 태그 없는 탭이 생기지 않도록 네이티브 추가 API를 막는다.
+    def addTab(self, *args, **kwargs):
+        """(막힘) 그룹 정보 없는 탭을 만들 수 있어 사용을 금지한다."""
+        raise RuntimeError(
+            "GroupTabBar 에서는 addTab() 을 직접 사용할 수 없습니다. "
+            "그룹 태그 없는 탭이 생겨 그룹 무결성이 깨집니다. "
+            "addGroupTab(text, group[, icon]) 을 사용하세요."
+        )
+
+    def insertTab(self, *args, **kwargs):
+        """(막힘) 그룹 정보 없는 탭을 만들 수 있어 사용을 금지한다."""
+        raise RuntimeError(
+            "GroupTabBar 에서는 insertTab() 을 직접 사용할 수 없습니다. "
+            "insertGroupTab(index, text, group[, icon]) 을 사용하세요."
+        )
 
     def tagTab(self, index, group):
         """이미 존재하는 탭에 그룹/uid 를 부여한다.
