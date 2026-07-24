@@ -12,8 +12,11 @@
 
 - ✅ **PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환** (`qtpy` 사용)
 - ✅ `QTabBar` / `QTabWidget` 기반 — 기본 탭 모양 유지
-- ✅ 탭 아이콘을 **타입으로 지정**(`setTabIconType`): 색 점 / 진행(초록 세모) /
+- ✅ 탭 아이콘을 **타입으로 지정**(`setTabIconType`): 색 점 / 진행(세모, **색상 지정 가능**) /
   Loading / Gear / 없음 — `registerIconType()` 로 **커스텀 타입 확장 가능**
+- ✅ **그룹 단위 전환**(`nextGroup`/`previousGroup`)과 **같은 그룹 내 탭 순환 전환**
+  (`nextTabInGroup`/`previousTabInGroup`, 1→2→3→1) 지원
+- ✅ **탭별 툴팁**(마우스오버 설명) 지원 — `addGroupTab(..., tooltip="...")` 또는 `setTabToolTip(index, text)`
 - ✅ **닫기 버튼**(`setTabsClosable(True)`) 지원 — 라벨과 겹치지 않게 공간 자동 확보
 - ✅ 그룹에 탭 추가 시 해당 그룹 블록의 **마지막 순서**에 삽입
 - ✅ 드래그 시 그룹이 **블록 단위로 함께 이동** — 잡은 그룹이 네이티브
@@ -57,11 +60,12 @@ QT_API=pyqt6   python examples/basic_example.py
 QT_API=pyside6 python examples/basic_example.py
 ```
 
-데모에는 그룹별 색 점 / 아이콘 없는 탭 / **애니메이션 GIF** / **진행(초록 세모)**
+데모에는 그룹별 색 점 / 아이콘 없는 탭 / **애니메이션 GIF** / **진행(세모)**
 아이콘이 섞여 있고, "현재 탭 아이콘" 버튼(색 점 / Loading / Gear / 진행 / 없음)으로
-바로 바꿔볼 수 있습니다. 그룹 전환 버튼(◀ 그룹 / 그룹 ▶), 상단 액센트 바 토글,
-**그룹 모양 선택 콤보**(라운딩 / 왼쪽 색상 / 네이티브), **이동 애니메이션 토글**도
-있습니다.
+바로 바꿔볼 수 있습니다. **진행 색상 콤보**로 세모 아이콘 색을 바꿔볼 수 있고,
+그룹 전환 버튼(◀ 그룹 / 그룹 ▶)과 **같은 그룹 내 탭 이동 버튼**(◀ 탭 / 탭 ▶),
+상단 액센트 바 토글, **그룹 모양 선택 콤보**(라운딩 / 왼쪽 색상 / 네이티브),
+**이동 애니메이션 토글**도 있습니다.
 
 기본 제공 GIF(`loading.gif` 회전 스피너, `gear.gif` 회전 톱니바퀴)는
 패키지(`src/grouptab/assets/`)에 포함되어 `setTabIconType(i, GroupTabWidget.ICON_LOADING)`
@@ -83,13 +87,18 @@ tabs.addGroupTab(QLabel("페이지2"), "Tab2", 1)
 tabs.addGroupTab(QLabel("페이지3"), "Tab3", 2)
 tabs.addGroupTab(QLabel("페이지4"), "Tab4", 1)   # 탭 순서: Tab1, Tab2, Tab4, Tab3
 
+# 탭별 툴팁(마우스오버 설명) — 생성 시 지정하거나 나중에 setTabToolTip 으로
+tabs.addGroupTab(QLabel("페이지6"), "Tab6", 1, tooltip="여섯 번째 탭 설명")
+tabs.setTabToolTip(0, "첫 번째 탭 설명")   # 나중에 지정/변경
+
 # 아이콘도 함께 지정 가능
 from qtpy.QtGui import QIcon
 tabs.addGroupTab(QLabel("페이지5"), "Tab5", 2, QIcon("icon.png"))
 # 또는 나중에: tabs.setTabIcon(index, QIcon("icon.png"))
 
 # 아이콘은 "타입"으로 지정한다 (setTabIconType). 타입별 setter 를 따로 두지 않는다.
-tabs.setTabIconType(0, GroupTabWidget.ICON_PROGRESS)          # 진행(초록 세모)
+tabs.setTabIconType(0, GroupTabWidget.ICON_PROGRESS)          # 진행(초록 세모, 기본색)
+tabs.setTabIconType(0, GroupTabWidget.ICON_PROGRESS, color="#1976d2")  # 진행(색 지정)
 tabs.setTabIconType(1, GroupTabWidget.ICON_COLOR, color="#f00")  # 색 점(색 지정)
 tabs.setTabIconType(2, GroupTabWidget.ICON_LOADING)          # 로딩 스피너(GIF)
 tabs.setTabIconType(3, GroupTabWidget.ICON_GEAR)             # 톱니바퀴(GIF)
@@ -119,6 +128,14 @@ tabs.removeGroup(1)        # 그룹 1 의 모든 탭(과 페이지)을 한 번�
 # 조회 등 QTabWidget 의 나머지 기능은 그대로 사용 가능
 tabs.currentWidget()
 tabs.setCurrentGroup(2)
+
+# 그룹 단위 전환
+tabs.nextGroup()           # 다음 그룹으로 (그룹별 마지막 본 탭으로 복귀)
+tabs.previousGroup()       # 이전 그룹으로
+
+# 같은 그룹 안에서만 탭 순환 전환 (그룹에 탭이 3개면 1→2→3→1)
+tabs.nextTabInGroup()      # 같은 그룹의 다음 탭 (마지막이면 첫 탭으로)
+tabs.previousTabInGroup()  # 같은 그룹의 이전 탭 (첫 탭이면 마지막으로)
 ```
 
 > **그룹 관리는 전용 API로만 하세요.** 그룹 무결성을 위해 탭 추가/삽입은
@@ -159,8 +176,8 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 
 | 메서드 | 설명 |
 | --- | --- |
-| `addGroupTab(widget, label, group[, icon])` | 그룹의 마지막 순서에 (위젯, 라벨) 탭 추가 |
-| `insertGroupTab(index, widget, label, group[, icon])` | 지정 위치에 (위젯, 라벨) 탭 삽입 |
+| `addGroupTab(widget, label, group[, icon][, tooltip])` | 그룹의 마지막 순서에 (위젯, 라벨) 탭 추가. `tooltip` 지정 시 그 탭의 툴팁 설정 |
+| `insertGroupTab(index, widget, label, group[, icon][, tooltip])` | 지정 위치에 (위젯, 라벨) 탭 삽입 |
 | `removeGroupTab(index)` | 단일 탭(과 페이지) 제거 (`removeTab` 과 동일) |
 | `removeGroup(group)` | 그룹의 모든 탭(과 페이지)을 한 번에 제거 → 제거 수 반환 |
 | `tabGroup(index)` / `groupTabIndices(group)` / `groupOrder()` | 그룹 정보 조회 |
@@ -168,6 +185,7 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `currentGroup()` | 현재 선택된 탭의 그룹 |
 | `setCurrentGroup(group)` | 해당 그룹으로 전환 (그룹별 마지막 탭, 없으면 첫 탭) |
 | `nextGroup()` / `previousGroup()` | 다음/이전 그룹으로 순환 전환 |
+| `nextTabInGroup()` / `previousTabInGroup()` | **같은 그룹 안에서** 다음/이전 탭으로 순환 전환 (1→2→3→1). 그룹 경계를 넘지 않으며, 탭이 1개거나 선택이 없으면 `False` 반환 |
 | `setGroupStyle(style)` / `groupStyle()` | 그룹 모양: `STYLE_ROUNDED` / `STYLE_LEFT_COLOR` / `STYLE_PLAIN` |
 | `setGroupColor(group, color)` | `STYLE_LEFT_COLOR` 에서 그룹별 마커 색 지정 (None 이면 기본색 순환) |
 | `setGroupMoveAnimationEnabled(bool)` / `groupMoveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
@@ -176,6 +194,7 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `setTabMovie(index, movie)` / `tabMovie(index)` | 탭에 사용자 지정 애니메이션(GIF) 아이콘 설정/조회 (`None`이면 해제) |
 | `setTopAccentEnabled(bool)` / `topAccentEnabled()` | 상단 액센트 바 on/off (기본 on) |
 | `setTopAccentColor(color)` | 액센트 바 색상 (None 이면 팔레트 highlight) |
+| `setTabToolTip(index, text)` / `tabToolTip(index)` | 탭별 툴팁(마우스오버 설명) 설정/조회 (`QTabWidget` 상속, 탭 이동 시 함께 따라감) |
 | `setTabsClosable(bool)` | 닫기 버튼 표시 on/off |
 | `addTab()` / `insertTab()` | ⛔ **막힘** — 그룹 무결성 보호를 위해 `RuntimeError`. `addGroupTab`/`insertGroupTab` 사용 |
 | (그 외) | `removeTab` 등 `QTabWidget` 의 나머지 메서드는 그대로 사용 가능 |
@@ -190,8 +209,9 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 
 | 메서드 | 설명 |
 | --- | --- |
-| `addGroupTab(text, group[, icon])` | 그룹의 마지막 순서에 탭 추가 → 추가된 인덱스 반환 |
-| `insertGroupTab(index, text, group[, icon])` | 지정 위치에 그룹 탭 삽입 |
+| `addGroupTab(text, group[, icon][, tooltip])` | 그룹의 마지막 순서에 탭 추가 → 추가된 인덱스 반환. `tooltip` 지정 시 그 탭의 툴팁 설정 |
+| `insertGroupTab(index, text, group[, icon][, tooltip])` | 지정 위치에 그룹 탭 삽입 |
+| `setTabToolTip(index, text)` / `tabToolTip(index)` | 탭별 툴팁 설정/조회 (`QTabBar` 상속) |
 | `removeGroup(group)` | 그룹의 모든 탭 제거 → 제거 수 반환 |
 | `tabGroup(index)` | 해당 탭의 그룹 번호 반환 |
 | `groupTabIndices(group)` | 해당 그룹에 속한 탭 인덱스 목록 |
@@ -207,8 +227,8 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `currentGroupChanged(group)` | 선택된 탭의 그룹이 바뀌었을 때 방출 |
 
 > 위 그룹 전환 API(`currentGroup` / `setCurrentGroup` / `nextGroup` /
-> `previousGroup`)와 `currentGroupChanged` 시그널은 `GroupTabBar` 에도
-> 동일하게 있습니다.
+> `previousGroup` / `nextTabInGroup` / `previousTabInGroup`)와
+> `currentGroupChanged` 시그널은 `GroupTabBar` 에도 동일하게 있습니다.
 
 ## 동작 방식
 

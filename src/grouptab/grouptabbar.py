@@ -183,13 +183,15 @@ class GroupTabBar(QTabBar):
     # ------------------------------------------------------------------ #
     # 공개 API
     # ------------------------------------------------------------------ #
-    def addGroupTab(self, text, group, icon=None):
+    def addGroupTab(self, text, group, icon=None, tooltip=None):
         """주어진 그룹의 마지막 순서에 탭을 추가한다.
 
         그룹이 이미 존재하면 해당 그룹 블록의 끝에 삽입되고, 존재하지
         않으면 전체 탭의 맨 뒤에 새 그룹 블록으로 추가된다.
 
         icon 에 QIcon 을 주면 탭에 아이콘이 함께 표시된다.
+        tooltip 에 문자열을 주면 그 탭의 툴팁으로 지정된다
+        (나중에 setTabToolTip(index, text) 로도 설정/변경 가능).
 
         Returns:
             int: 새로 추가된 탭의 인덱스.
@@ -199,14 +201,16 @@ class GroupTabBar(QTabBar):
             pos = indices[-1] + 1
         else:
             pos = self.count()
-        return self.insertGroupTab(pos, text, group, icon)
+        return self.insertGroupTab(pos, text, group, icon, tooltip)
 
-    def insertGroupTab(self, index, text, group, icon=None):
+    def insertGroupTab(self, index, text, group, icon=None, tooltip=None):
         """index 위치에 group 소속 탭을 삽입한다.
 
         주의: 그룹의 인접성(같은 그룹끼리 붙어있어야 함)을 깨뜨리는
         위치를 직접 지정하면 표시가 어긋날 수 있다. 일반적인 사용에는
         addGroupTab() 을 권장한다.
+
+        tooltip 에 문자열을 주면 그 탭의 툴팁으로 지정된다.
 
         Returns:
             int: 새로 추가된 탭의 인덱스.
@@ -218,6 +222,8 @@ class GroupTabBar(QTabBar):
         else:
             idx = super().insertTab(index, text)
         self.tagTab(idx, group)
+        if tooltip is not None:
+            self.setTabToolTip(idx, tooltip)
         return idx
 
     def removeGroup(self, group):

@@ -84,11 +84,13 @@ class GroupTabWidget(QTabWidget):
         """해당 탭의 닫기 X 가 실제로 보이는지 반환한다."""
         return self._bar.isTabCloseButtonVisible(index)
 
-    def addGroupTab(self, widget, label, group, icon=None):
+    def addGroupTab(self, widget, label, group, icon=None, tooltip=None):
         """주어진 그룹의 마지막 순서에 (위젯, 라벨) 탭을 추가한다.
 
         그룹이 이미 존재하면 해당 그룹 블록의 끝에, 없으면 전체의 맨 뒤에
         새 그룹 블록으로 추가된다. icon 에 QIcon 을 주면 탭에 함께 표시된다.
+        tooltip 에 문자열을 주면 그 탭의 툴팁으로 지정된다
+        (나중에 setTabToolTip(index, text) 로도 설정/변경 가능).
 
         Returns:
             int: 새로 추가된 탭의 인덱스.
@@ -98,10 +100,12 @@ class GroupTabWidget(QTabWidget):
             pos = indices[-1] + 1
         else:
             pos = self.count()
-        return self.insertGroupTab(pos, widget, label, group, icon)
+        return self.insertGroupTab(pos, widget, label, group, icon, tooltip)
 
-    def insertGroupTab(self, index, widget, label, group, icon=None):
+    def insertGroupTab(self, index, widget, label, group, icon=None, tooltip=None):
         """index 위치에 group 소속 (위젯, 라벨) 탭을 삽입한다.
+
+        tooltip 에 문자열을 주면 그 탭의 툴팁으로 지정된다.
 
         Returns:
             int: 새로 추가된 탭의 인덱스.
@@ -114,6 +118,8 @@ class GroupTabWidget(QTabWidget):
             idx = super().insertTab(index, widget, label)
         # 추가된 탭에 그룹 정보를 부여한다.
         self._bar.tagTab(idx, group)
+        if tooltip is not None:
+            self.setTabToolTip(idx, tooltip)
         return idx
 
     def removeGroupTab(self, index):

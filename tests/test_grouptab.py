@@ -280,6 +280,28 @@ def test_next_tab_in_group_single_or_empty(qapp):
     assert empty.previousTabInGroup() is False
 
 
+def test_tab_tooltip(qapp):
+    """탭별 툴팁: 생성 시 tooltip 파라미터 + setTabToolTip 로 지정/변경."""
+    bar = GroupTabBar()
+    # 생성 시 tooltip 지정
+    i0 = bar.addGroupTab("A", 1, tooltip="탭 A 설명")
+    i1 = bar.addGroupTab("B", 1)                       # 툴팁 없음
+    i2 = bar.insertGroupTab(bar.count(), "C", 1, tooltip="탭 C 설명")
+    assert bar.tabToolTip(i0) == "탭 A 설명"
+    assert bar.tabToolTip(i1) == ""                    # 미지정이면 빈 문자열
+    assert bar.tabToolTip(i2) == "탭 C 설명"
+
+    # 나중에 setTabToolTip 으로 지정/변경
+    bar.setTabToolTip(i1, "나중에 지정")
+    assert bar.tabToolTip(i1) == "나중에 지정"
+
+    # 드래그로 순서가 바뀌어도 툴팁이 해당 탭을 따라간다(uid 기준 tabData 와 별개로
+    # QTabBar 가 탭 이동 시 툴팁도 함께 옮긴다).
+    bar.moveTab(i0, i2)
+    idx_a = next(k for k in range(bar.count()) if bar.tabText(k) == "A")
+    assert bar.tabToolTip(idx_a) == "탭 A 설명"
+
+
 def test_paint_empty_and_single(qapp):
     empty = GroupTabBar()
     empty.grab()

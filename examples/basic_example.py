@@ -184,7 +184,10 @@ class DemoWindow(QMainWindow):
     ]
 
     def _add_tab(self, name, group, kind="color"):
-        idx = self.tabs.addGroupTab(_make_page(name, group), name, group)
+        # tooltip 파라미터로 탭마다 마우스오버 설명을 지정한다.
+        tip = "‘{}’ 탭 (그룹 {})".format(name, group)
+        idx = self.tabs.addGroupTab(_make_page(name, group), name, group,
+                                    tooltip=tip)
         self._apply_icon(idx, kind, group)
         self.tabs.setCurrentIndex(idx)
         return idx
