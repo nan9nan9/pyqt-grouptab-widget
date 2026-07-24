@@ -183,6 +183,14 @@ class GroupTabWidget(QTabWidget):
         """이전 그룹으로 순환 전환한다."""
         self._bar.previousGroup()
 
+    def nextTabInGroup(self):
+        """같은 그룹 안에서 다음 탭으로 순환 전환한다. (1→2→3→1)"""
+        return self._bar.nextTabInGroup()
+
+    def previousTabInGroup(self):
+        """같은 그룹 안에서 이전 탭으로 순환 전환한다."""
+        return self._bar.previousTabInGroup()
+
     # ------------------------------------------------------------------ #
     # 애니메이션(GIF) 아이콘
     # ------------------------------------------------------------------ #

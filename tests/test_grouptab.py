@@ -240,6 +240,46 @@ def test_paint_all_styles(qapp, style):
     bar.grab()  # 예외 없이 완료되면 성공
 
 
+def test_next_tab_in_group_cycles(qapp):
+    """같은 그룹 안에서만 1→2→3→1 순환 전환한다."""
+    # 그룹 A: 탭 3개(idx 0,1,2), 그룹 B: 탭 2개(idx 3,4)
+    bar = make_bar([("A", 3), ("B", 2)])
+
+    # 그룹 A 정방향 순환: 0→1→2→0
+    bar.setCurrentIndex(0)
+    seq = [bar.currentIndex()]
+    for _ in range(3):
+        assert bar.nextTabInGroup() is True
+        seq.append(bar.currentIndex())
+    assert seq == [0, 1, 2, 0]
+
+    # 그룹 A 역방향 순환: 0→2→1→0
+    seq = [bar.currentIndex()]
+    for _ in range(3):
+        assert bar.previousTabInGroup() is True
+        seq.append(bar.currentIndex())
+    assert seq == [0, 2, 1, 0]
+
+    # 그룹 경계를 넘지 않는다: 그룹 B(2개)는 3↔4 만 오간다.
+    bar.setCurrentIndex(3)
+    bar.nextTabInGroup()
+    assert bar.currentIndex() == 4
+    bar.nextTabInGroup()
+    assert bar.currentIndex() == 3
+
+
+def test_next_tab_in_group_single_or_empty(qapp):
+    """탭이 하나뿐이거나 선택이 없으면 순환하지 않고 False 를 반환한다."""
+    single = make_bar([("A", 1)])
+    single.setCurrentIndex(0)
+    assert single.nextTabInGroup() is False
+    assert single.currentIndex() == 0
+
+    empty = GroupTabBar()
+    assert empty.nextTabInGroup() is False
+    assert empty.previousTabInGroup() is False
+
+
 def test_paint_empty_and_single(qapp):
     empty = GroupTabBar()
     empty.grab()

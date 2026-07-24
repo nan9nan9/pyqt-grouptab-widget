@@ -322,6 +322,31 @@ class GroupTabBar(QTabBar):
         """그룹 순서상 이전 그룹으로 순환 전환한다."""
         self.nextGroup(-1)
 
+    def nextTabInGroup(self, step=1):
+        """현재 탭과 같은 그룹 안에서 다음(step=1)/이전(step=-1) 탭으로 순환 전환한다.
+
+        같은 그룹에 탭이 3개면 1→2→3→1 순으로 돌아온다. 탭이 하나뿐이거나
+        선택된 탭이 없으면 아무 것도 하지 않는다.
+
+        Returns:
+            bool: 전환에 성공하면(그룹에 탭이 2개 이상) True.
+        """
+        cur = self.currentIndex()
+        if cur < 0:
+            return False
+        group = self.tabGroup(cur)
+        indices = self.groupTabIndices(group)
+        if len(indices) < 2:
+            return False
+        pos = indices.index(cur)
+        target = indices[(pos + step) % len(indices)]
+        self.setCurrentIndex(target)
+        return True
+
+    def previousTabInGroup(self):
+        """현재 탭과 같은 그룹 안에서 이전 탭으로 순환 전환한다."""
+        return self.nextTabInGroup(-1)
+
     def _on_current_changed(self, index):
         # insertTab 직후(아직 tagTab 전) 발생한 신호는 무시한다.
         # 태깅이 끝나면 tagTab 에서 다시 호출되어 올바르게 처리된다.
@@ -448,7 +473,7 @@ class GroupTabBar(QTabBar):
         pm.fill(Qt.transparent)
         p = QPainter(pm)
         p.setRenderHint(QPainter.Antialiasing, True)
-        m = size * 0.18                     # 가장자리 여백
+        m = size * 0.12                     # 가장자리 여백(작을수록 세모가 커짐)
         path = QPainterPath()
         path.moveTo(m, m)                   # 좌상
         path.lineTo(m, size - m)            # 좌하

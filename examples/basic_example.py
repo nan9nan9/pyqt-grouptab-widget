@@ -139,6 +139,10 @@ class DemoWindow(QMainWindow):
         tb.addWidget(self._btn("◀ 그룹", self.tabs.previousGroup))
         tb.addWidget(self._btn("그룹 ▶", self.tabs.nextGroup))
 
+        # 같은 그룹 안에서만 탭 순환 전환 (1→2→3→1)
+        tb.addWidget(self._btn("◀ 탭", self.tabs.previousTabInGroup))
+        tb.addWidget(self._btn("탭 ▶", self.tabs.nextTabInGroup))
+
         # 아이콘 변경 버튼들 (두 번째 줄)
         self.addToolBarBreak(Qt.BottomToolBarArea)
         tb2 = QToolBar("icons")
@@ -149,6 +153,24 @@ class DemoWindow(QMainWindow):
                            ("Gear", "gear"), ("진행", "progress"), ("없음", "none")]:
             tb2.addWidget(self._btn(
                 text, lambda checked=False, k=kind: self._set_current_icon(k)))
+
+        # 진행(세모) 아이콘 색상 선택 데모: 여기서 고른 색이 "진행" 버튼에 반영된다.
+        tb2.addWidget(QLabel(" 진행 색상: "))
+        self.progress_color_combo = QComboBox()
+        # (표시 이름, 색상값) — 첫 항목이 기본 초록.
+        self._progress_colors = [
+            ("초록(기본)", "#2e7d32"),
+            ("파랑", "#1976d2"),
+            ("빨강", "#d32f2f"),
+            ("주황", "#f57c00"),
+            ("보라", "#7b1fa2"),
+        ]
+        for name, _ in self._progress_colors:
+            self.progress_color_combo.addItem(name)
+        # 색상을 바꾸면 현재 탭이 진행 아이콘일 때 즉시 다시 적용한다.
+        self.progress_color_combo.currentIndexChanged.connect(
+            self._on_progress_color_changed)
+        tb2.addWidget(self.progress_color_combo)
 
     def _btn(self, text, slot):
         b = QPushButton(text)
@@ -178,8 +200,12 @@ class DemoWindow(QMainWindow):
                 group = self.tabs.tabGroup(idx)
             self.tabs.setTabIconType(idx, GroupTabWidget.ICON_COLOR,
                                      color=_group_color(group))
+        elif kind == GroupTabWidget.ICON_PROGRESS:
+            # 콤보박스에서 고른 색으로 세모(진행) 아이콘을 그린다.
+            self.tabs.setTabIconType(idx, GroupTabWidget.ICON_PROGRESS,
+                                     color=self._current_progress_color())
         else:
-            self.tabs.setTabIconType(idx, kind)   # loading / gear / progress / none
+            self.tabs.setTabIconType(idx, kind)   # loading / gear / none
 
     def _on_add(self):
         name = self._NAME_POOL[self._tab_counter % len(self._NAME_POOL)]
@@ -207,6 +233,18 @@ class DemoWindow(QMainWindow):
         if idx < 0:
             return
         self._apply_icon(idx, kind)
+
+    def _current_progress_color(self):
+        """콤보박스에서 선택된 진행(세모) 아이콘 색상값을 돌려준다."""
+        return self._progress_colors[self.progress_color_combo.currentIndex()][1]
+
+    def _on_progress_color_changed(self, _index):
+        """진행 색상을 바꾸면 현재 탭이 진행 아이콘일 때 즉시 다시 적용한다."""
+        idx = self.tabs.currentIndex()
+        if idx < 0:
+            return
+        # 현재 탭이 진행 아이콘이 아니어도 진행으로 바꿔 색상 변화를 바로 보여준다.
+        self._apply_icon(idx, GroupTabWidget.ICON_PROGRESS)
 
 
 def main():
