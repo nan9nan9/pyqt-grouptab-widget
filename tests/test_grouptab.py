@@ -751,3 +751,41 @@ def test_shortcut_falls_through_when_nothing_to_switch(qapp):
     _key(qapp, tabs, Qt.Key_F1)          # 같은 그룹에 넘어갈 탭이 없다
     assert tabs.currentIndex() == 0
     assert Qt.Key_F1 in seen             # 부모(앱)까지 전달됐다
+
+
+def _label_left_offset(bar, index):
+    """탭 안에서 라벨(글자/아이콘)이 시작하는 x 를 탭 왼쪽 기준으로 잰다."""
+    img = bar.grab().toImage()
+    r = bar.tabRect(index)
+    bg = img.pixelColor(r.left() + 2, r.center().y())
+    ys = range(r.top() + r.height() // 3, r.bottom() - r.height() // 4)
+    for x in range(r.left() + 1, r.right() - 1):
+        for y in ys:
+            c = img.pixelColor(x, y)
+            if (abs(c.red() - bg.red()) + abs(c.green() - bg.green())
+                    + abs(c.blue() - bg.blue())) > 90:
+                return x - r.left()
+    return None
+
+
+def test_label_left_margin_same_when_selected_or_not(qapp):
+    """선택/비선택(굵은 글씨 여부)에 따라 라벨 왼쪽 여백이 달라지지 않는다.
+
+    탭 폭은 항상 굵은 글씨 기준으로 잡으므로, 라벨 배치도 같은 기준으로
+    계산해야 얇은 글씨(비선택)일 때 왼쪽 여백이 밀리지 않는다.
+    """
+    bar = GroupTabBar()
+    bar.addGroupTab("Dashboard", 1)
+    bar.addGroupTab("Settings", 2)
+    bar.resize(600, 40)
+
+    bar.setCurrentIndex(0)
+    sel0, unsel1 = _label_left_offset(bar, 0), _label_left_offset(bar, 1)
+    bar.setCurrentIndex(1)
+    unsel0, sel1 = _label_left_offset(bar, 0), _label_left_offset(bar, 1)
+
+    assert None not in (sel0, unsel0, sel1, unsel1)
+    # 라벨 시작 위치는 동일하다. (굵은 글씨의 글자 자체 여백 때문에 첫 글자
+    # 픽셀이 1px 정도 달라질 수는 있다. 수정 전에는 5~6px 씩 밀렸다)
+    assert abs(sel0 - unsel0) <= 1
+    assert abs(sel1 - unsel1) <= 1

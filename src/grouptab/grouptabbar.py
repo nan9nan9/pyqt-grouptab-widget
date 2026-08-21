@@ -648,6 +648,13 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
         y = rect.center().y() - s // 2
         return QRect(x, y, s, s)
 
+    @staticmethod
+    def _text_width(fm, text):
+        """QFontMetrics 로 문자열 폭을 잰다. (Qt5 width / Qt6 horizontalAdvance)"""
+        if hasattr(fm, "horizontalAdvance"):
+            return fm.horizontalAdvance(text)
+        return fm.width(text)
+
     def _draw_rect(self, index):
         """탭을 그릴 기준 사각형."""
         return self.tabRect(index)
@@ -825,11 +832,7 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
         # 좌우 여백을 줄인다. 선택 시 굵은 글씨가 되어도 잘리지 않도록 항상
         # 굵은 글씨 기준으로 폭을 잡는다.
         fm = QFontMetrics(self._bold_font())
-        text = self.tabText(index)
-        if hasattr(fm, "horizontalAdvance"):
-            tw = fm.horizontalAdvance(text)
-        else:
-            tw = fm.width(text)
+        tw = self._text_width(fm, self.tabText(index))
         iw = self.iconSize().width() if not self.tabIcon(index).isNull() else 0
         gap = self._ICON_TEXT_GAP if iw else 0
         # 닫기 X 가 켜져 있으면 그만큼 폭을 더 확보한다. (탭별 표시 여부 반영)
@@ -982,12 +985,16 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
                 r = r.translated(int(round(off)), 0)
         return r
 
-    def _draw_tab_label(self, painter, rect, index, font, fm, selected):
+    def _draw_tab_label(self, painter, rect, index, font, fm, selected,
+                        layout_fm=None):
         """탭의 아이콘 + 텍스트를 직접 그린다.
 
         아이콘과 텍스트를 같은 세로 중심선에 맞추고(수직 중앙 정렬), 좌우
-        여백을 줄여서 묶음을 탭 중앙에 배치한다. fm 은 font 에 대응하는
-        QFontMetrics 로, paint 루프에서 폰트당 한 번만 만들어 넘겨받는다.
+        여백을 줄여서 묶음을 탭 중앙에 배치한다.
+
+        fm 은 font 에 대응하는 QFontMetrics 로, paint 루프에서 폰트당 한 번만
+        만들어 넘겨받는다. layout_fm 은 **배치 계산에만** 쓰는 QFontMetrics 로,
+        탭 폭을 잡을 때와 같은 굵은 글씨 기준을 넘겨받는다. (없으면 fm 사용)
         """
         text = self.tabText(index)
         icon = self.tabIcon(index)
@@ -1006,14 +1013,19 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
 
         avail = max(0, inner.width() - iw - gap)
         elided = fm.elidedText(text, Qt.ElideRight, avail)
-        if hasattr(fm, "horizontalAdvance"):
-            tw = fm.horizontalAdvance(elided)
-        else:
-            tw = fm.width(elided)
+        tw = self._text_width(fm, elided)
+
+        # 배치(시작 x)는 **탭 폭을 잡을 때와 같은 굵은 글씨 기준**으로 계산한다.
+        # 탭 폭은 항상 굵은 글씨(선택 시) 기준이라, 그리는 폰트(비선택=얇은
+        # 글씨) 폭으로 가운데 정렬하면 남는 폭이 좌우로 나뉘어 선택 상태에 따라
+        # 왼쪽 여백이 달라져 보인다. 굵은 글씨 기준으로 계산하면 선택/비선택이
+        # 같은 자리에서 시작한다. (아이콘만 있는 탭은 원래 차이가 없다)
+        lfm = layout_fm if layout_fm is not None else fm
+        layout_tw = self._text_width(lfm, lfm.elidedText(text, Qt.ElideRight, avail))
 
         # 안쪽 영역 중앙에 배치 → 좌측은 최소 _LABEL_LMARGIN, 우측은 최소
         # _LABEL_RMARGIN 이 유지된다. (여유가 있으면 양쪽에 고르게 분배)
-        total = iw + gap + tw
+        total = iw + gap + layout_tw
         x = inner.left() + (inner.width() - total) // 2
         x = max(x, inner.left())
         cy = rect.center().y()
@@ -1247,7 +1259,8 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
                 font, fm = bold_font, bold_fm
             else:
                 font, fm = normal_font, normal_fm
-            self._draw_tab_label(painter, label_rect, i, font, fm, i == selected)
+            self._draw_tab_label(painter, label_rect, i, font, fm, i == selected,
+                                 layout_fm=bold_fm)
 
             # 닫기 X 를 (자식 위젯이 아니라) 직접 그린다 → z-order 충돌 없음.
             # 전역 스위치가 켜져 있고 그 탭이 숨김 대상이 아닐 때만 그린다.
