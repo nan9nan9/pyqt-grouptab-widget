@@ -14,7 +14,7 @@ import pytest
 from qtpy.QtCore import Qt, QEvent, QPoint
 from qtpy.QtGui import QMouseEvent
 from qtpy.QtTest import QTest
-from qtpy.QtWidgets import QApplication, QLabel
+from qtpy.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 from grouptab.grouptabbar import GroupTabBar
 from grouptab.grouptabwidget import GroupTabWidget
@@ -666,3 +666,88 @@ def test_widget_does_not_duplicate_bar_shortcuts(qapp):
     qapp.processEvents()
     _key(qapp, bar, Qt.Key_Tab, Qt.ControlModifier)
     assert w.currentGroup() == 2
+
+
+def test_shortcut_yields_to_app_shortcut(qapp):
+    """앱이 같은 키를 이미 단축키로 쓰고 있으면 그쪽이 우선한다.
+
+    QShortcut 으로 등록하면 Qt 가 ambiguous shortcut 으로 보고 어느 쪽도
+    실행하지 않아 키가 먹통이 되므로, 기본 문맥에서는 키 이벤트로 처리한다.
+    """
+    from qtpy.QtGui import QKeySequence
+    try:
+        from qtpy.QtGui import QShortcut
+    except ImportError:
+        from qtpy.QtWidgets import QShortcut
+
+    w = GroupTabWidget()
+    for group in (1, 2):
+        for k in range(3):
+            w.addGroupTab(QLabel("%d-%d" % (group, k)), "%d-%d" % (group, k), group)
+
+    hits = []
+    sc = QShortcut(QKeySequence("F1"), w)
+    sc.setContext(Qt.WindowShortcut)
+    sc.activated.connect(lambda: hits.append("app"))
+
+    _activate(w, qapp)
+    w.setCurrentIndex(0)
+    for n in range(3):
+        _key(qapp, w, Qt.Key_F1)
+        assert hits == ["app"] * (n + 1)   # 매번 앱 핸들러가 실행된다
+        assert w.currentIndex() == 0       # 라이브러리 기본 동작은 비켜선다
+
+    # 겹치지 않는 Ctrl+Tab 은 그대로 그룹 전환으로 동작한다.
+    _key(qapp, w, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 2
+
+
+def test_shortcut_window_context(qapp):
+    """문맥을 WindowShortcut 으로 바꾸면 창 안 다른 위젯에 포커스가 있어도 동작한다."""
+    from qtpy.QtWidgets import QVBoxLayout, QWidget, QLineEdit
+
+    win = QWidget()
+    lay = QVBoxLayout(win)
+    tabs = GroupTabWidget()
+    for group in (1, 2):
+        tabs.addGroupTab(QLabel("p%d" % group), "t%d" % group, group)
+    edit = QLineEdit()
+    lay.addWidget(tabs)
+    lay.addWidget(edit)
+    tabs.setSwitchShortcutContext(Qt.WindowShortcut)
+    assert tabs.switchShortcutContext() == Qt.WindowShortcut
+
+    _activate(win, qapp)
+    tabs.setCurrentIndex(0)
+    edit.setFocus()
+    qapp.processEvents()
+    _key(qapp, edit, Qt.Key_Tab, Qt.ControlModifier)
+    assert tabs.currentGroup() == 2
+
+
+def test_shortcut_falls_through_when_nothing_to_switch(qapp):
+    """전환할 대상이 없으면(그룹에 탭 1개) 키를 삼키지 않고 흘려보낸다.
+
+    앱이 keyPressEvent 등으로 그 키를 쓰고 있으면 그쪽이 받을 수 있어야 한다.
+    """
+    seen = []
+
+    class Host(QWidget):
+        def keyPressEvent(self, event):
+            seen.append(event.key())
+            super().keyPressEvent(event)
+
+    host = Host()
+    lay = QVBoxLayout(host)
+    tabs = GroupTabWidget()
+    tabs.addGroupTab(QLabel("only"), "only", 1)   # 그룹 1개, 탭 1개
+    lay.addWidget(tabs)
+
+    _activate(host, qapp)
+    tabs.setCurrentIndex(0)
+    tabs.setFocus()
+    qapp.processEvents()
+
+    _key(qapp, tabs, Qt.Key_F1)          # 같은 그룹에 넘어갈 탭이 없다
+    assert tabs.currentIndex() == 0
+    assert Qt.Key_F1 in seen             # 부모(앱)까지 전달됐다

@@ -947,6 +947,18 @@ class GroupTabBar(SwitchShortcutMixin, QTabBar):
             self.update()
         super().mouseReleaseEvent(event)
 
+    def keyPressEvent(self, event):
+        """전환 단축키(기본 Ctrl+Tab / F1)를 처리한다.
+
+        QShortcut 이 아니라 키 이벤트로 처리하므로, 앱이 같은 키를 이미
+        단축키로 쓰고 있으면 그쪽이 먼저 처리되고 여기까지 오지 않는다.
+        (충돌로 키가 먹통이 되지 않는다)
+        """
+        if self.handleSwitchKey(event):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def leaveEvent(self, event):
         if self._close_hover_index != -1:
             self._close_hover_index = -1

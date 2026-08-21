@@ -47,7 +47,7 @@ src/grouptab/          # 패키지
   __init__.py          # GroupTabBar, GroupTabWidget export
   grouptabbar.py
   grouptabwidget.py
-  shortcuts.py         # 전환 단축키(Ctrl+Tab / F1) 믹스인
+  shortcuts.py         # 전환 단축키(Ctrl+Tab / F1) 믹스인 — 키 이벤트로 처리
   assets/              # 기본 제공 GIF (loading.gif, gear.gif)
 examples/
   basic_example.py     # 데모 앱
@@ -154,8 +154,23 @@ tabs.previousTabInGroup()  # 같은 그룹의 이전 탭 (첫 탭이면 마지�
 | `F1` / `Shift+F1` | **같은 그룹 안에서** 다음/이전 탭으로 순환 (1→2→3→1) |
 
 일반 `QTabWidget` 의 `Ctrl+Tab` 은 탭을 하나씩 넘기지만, 그룹탭에서는 그룹
-단위로 넘어가도록 대체됩니다. (`QShortcut` 이 키 이벤트보다 먼저 처리되므로
-`QTabWidget` 의 기본 동작은 실행되지 않습니다.)
+단위로 넘어가도록 대체됩니다.
+
+**앱이 이미 쓰고 있는 키는 침범하지 않습니다.** 이 단축키들은 `QShortcut` 이
+아니라 키 이벤트(`keyPressEvent`)로 처리합니다. Qt 는 단축키를 키 이벤트보다
+먼저 처리하므로,
+
+- 앱이 그 키를 이미 단축키(`QShortcut`/`QAction`)로 쓰고 있으면 → **앱 것이
+  그대로 동작**하고 여기 기본 동작은 조용히 비켜섭니다.
+- 아무도 쓰지 않으면 → 포커스가 탭 위젯이나 그 자식(페이지 안쪽 포함)에 있을 때
+  여기서 처리합니다.
+
+(같은 키를 `QShortcut` 으로 중복 등록하면 Qt 가 "ambiguous shortcut" 으로 보고
+어느 쪽도 실행하지 않아 그 키가 먹통이 되는데, 이를 피하기 위한 방식입니다.)
+
+전환할 대상이 없을 때(예: 현재 그룹에 탭이 하나뿐이라 `F1` 로 갈 곳이 없을 때)
+는 키를 삼키지 않고 그대로 흘려보내므로, 앱의 상위 위젯이 그 키를 처리할 수
+있습니다.
 
 ```python
 # 켜고 끄기 (기본은 둘 다 켜짐)
@@ -167,14 +182,18 @@ tabs.setGroupSwitchKeys("Ctrl+PgDown", "Ctrl+PgUp")
 tabs.setTabSwitchKeys("Alt+Right", "Alt+Left")
 
 # 동작 범위 — 기본은 이 위젯과 그 자식(페이지 안쪽 포함)에 포커스가 있을 때.
-# 창 전체에서 받으려면:
+# 창 전체(툴바 등 탭 위젯 밖에 포커스가 있어도)에서 받으려면:
 from qtpy.QtCore import Qt
 tabs.setSwitchShortcutContext(Qt.WindowShortcut)
 ```
 
-> `F1` 은 일부 앱에서 도움말 키로도 쓰이므로, 충돌하면
-> `setTabSwitchKeys(...)` 로 바꾸거나 `setTabSwitchShortcutEnabled(False)` 로
-> 끄고 원하는 곳에 직접 연결하세요.
+> `Qt.WindowShortcut` / `Qt.ApplicationShortcut` 을 지정하면 그때는 `QShortcut`
+> 으로 등록됩니다. 창/앱 전체에서 받을 수 있는 대신, 같은 키를 쓰는 다른
+> 단축키와 충돌하면 양쪽 다 동작하지 않을 수 있습니다.
+
+> `F1` 은 일부 앱에서 도움말 키로도 쓰이므로, 앱에서 이미 쓰고 있다면 그쪽이
+> 우선합니다. 반대로 라이브러리 기본 동작을 쓰고 싶다면 앱 쪽 `F1` 을 없애거나,
+> `setTabSwitchKeys(...)` 로 다른 조합으로 바꾸세요.
 
 > **그룹 관리는 전용 API로만 하세요.** 그룹 무결성을 위해 탭 추가/삽입은
 > `addGroupTab()` / `insertGroupTab()` 로만 해야 합니다. 상속된
@@ -228,7 +247,7 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `setTabSwitchShortcutEnabled(bool)` / `tabSwitchShortcutEnabled()` | 그룹 내 탭 전환 단축키(기본 `F1` / `Shift+F1`) on/off (기본 on) |
 | `setGroupSwitchKeys(next, prev)` / `groupSwitchKeys()` | 그룹 전환 단축키 조합 변경/조회 (문자열 또는 `QKeySequence`, `None` 이면 미등록) |
 | `setTabSwitchKeys(next, prev)` / `tabSwitchKeys()` | 그룹 내 탭 전환 단축키 조합 변경/조회 |
-| `setSwitchShortcutContext(context)` / `switchShortcutContext()` | 단축키 동작 범위 (기본 `Qt.WidgetWithChildrenShortcut`, 창 전체는 `Qt.WindowShortcut`) |
+| `setSwitchShortcutContext(context)` / `switchShortcutContext()` | 단축키 동작 범위 (기본 `Qt.WidgetWithChildrenShortcut` = 키 이벤트 처리, 창 전체는 `Qt.WindowShortcut` = `QShortcut` 등록) |
 | `setGroupStyle(style)` / `groupStyle()` | 그룹 모양: `STYLE_ROUNDED` / `STYLE_LEFT_COLOR` / `STYLE_PLAIN` |
 | `setGroupColor(group, color)` | `STYLE_LEFT_COLOR` 에서 그룹별 마커 색 지정 (None 이면 기본색 순환) |
 | `setGroupMoveAnimationEnabled(bool)` / `groupMoveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
@@ -273,9 +292,8 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 > 위 그룹 전환 API(`currentGroup` / `setCurrentGroup` / `nextGroup` /
 > `previousGroup` / `nextTabInGroup` / `previousTabInGroup`)와 전환 단축키
 > 설정, `currentGroupChanged` 시그널은 `GroupTabBar` 에도 동일하게 있습니다.
-> 단, `GroupTabWidget` 안에서는 탭 위젯 쪽 단축키만 켜 두고 내부 탭 바의
-> 단축키는 꺼 둡니다. (같은 키가 두 번 잡히면 Qt 가 ambiguous shortcut 으로
-> 무시하기 때문입니다)
+> 단, `GroupTabWidget` 안에서는 탭 위젯 쪽에서만 처리하고 내부 탭 바의
+> 단축키는 꺼 둡니다. (탭 바가 처리하지 않은 키는 부모인 탭 위젯으로 올라옵니다)
 
 ## 동작 방식
 

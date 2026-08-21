@@ -18,6 +18,7 @@ QTabWidget 처럼 탭마다 위젯(페이지)을 등록할 수 있으면서, 탭
 PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환된다. (qtpy 사용)
 """
 
+from qtpy.QtCore import QEvent
 from qtpy.QtWidgets import QTabWidget
 
 from .grouptabbar import GroupTabBar
@@ -59,15 +60,41 @@ class GroupTabWidget(SwitchShortcutMixin, QTabWidget):
         # QTabWidget 의 동일 시그널로 직접 포워딩한다.
         self._bar.tabCloseRequested.connect(self.tabCloseRequested)
 
-        # 그룹/탭 전환 단축키는 탭 위젯 쪽에서만 등록한다.
-        # (탭 바에도 같은 단축키가 남아 있으면 탭 바에 포커스가 있을 때
-        #  같은 키가 두 번 잡혀 Qt 가 "ambiguous shortcut" 으로 무시한다.)
+        # 그룹/탭 전환 단축키는 탭 위젯 쪽에서만 처리한다. (탭 바에 포커스가
+        # 있어도 탭 바가 처리하지 않은 키는 부모인 이쪽으로 올라온다)
         self._bar.setGroupSwitchShortcutEnabled(False)
         self._bar.setTabSwitchShortcutEnabled(False)
         # Ctrl+Tab / Ctrl+Shift+Tab -> 다음/이전 그룹 (QTabWidget 기본
         # 동작인 "다음 탭" 대신 그룹 단위로 넘어간다)
         # F1 / Shift+F1             -> 같은 그룹 안에서 다음/이전 탭
         self._init_switch_shortcuts()
+
+    # ------------------------------------------------------------------ #
+    # 전환 단축키 (키 이벤트로 처리)
+    # ------------------------------------------------------------------ #
+    def keyPressEvent(self, event):
+        """전환 단축키(기본 Ctrl+Tab / F1)를 처리한다.
+
+        QShortcut 이 아니라 키 이벤트로 처리하므로, 앱이 같은 키를 이미
+        단축키로 쓰고 있으면 그쪽이 먼저 처리되고 여기까지 오지 않는다.
+        (충돌로 키가 먹통이 되지 않는다)
+        """
+        if self.handleSwitchKey(event):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def eventFilter(self, obj, event):
+        """QTabWidget 이 내장한 Ctrl+Tab(다음 탭) 처리를 가로챈다.
+
+        QTabWidget 은 페이지 스택에 이벤트 필터를 걸어 Ctrl+Tab 을 "다음 탭"
+        으로 처리한다. 그룹탭에서는 그룹 단위로 넘어가야 하므로, 그 처리가
+        일어나기 전에 여기서 먼저 잡는다.
+        """
+        if event.type() == QEvent.KeyPress and self.handleSwitchKey(event):
+            event.accept()
+            return True
+        return super().eventFilter(obj, event)
 
     # ------------------------------------------------------------------ #
     # 공개 API
