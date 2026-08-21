@@ -136,12 +136,16 @@ class DemoWindow(QMainWindow):
         style_combo.currentIndexChanged.connect(self._on_style_changed)
         tb.addWidget(style_combo)
 
+        # 그룹 전환 = Ctrl+Tab / Ctrl+Shift+Tab 단축키와 같은 동작
         tb.addWidget(self._btn("◀ 그룹", self.tabs.previousGroup))
         tb.addWidget(self._btn("그룹 ▶", self.tabs.nextGroup))
 
-        # 같은 그룹 안에서만 탭 순환 전환 (1→2→3→1)
+        # 같은 그룹 안에서만 탭 순환 전환 (1→2→3→1) = F1 / Shift+F1
         tb.addWidget(self._btn("◀ 탭", self.tabs.previousTabInGroup))
         tb.addWidget(self._btn("탭 ▶", self.tabs.nextTabInGroup))
+
+        # 단축키 안내
+        tb.addWidget(QLabel("  [Ctrl+Tab: 그룹 전환 / F1: 그룹 내 탭 전환]  "))
 
         # 아이콘 변경 버튼들 (두 번째 줄)
         self.addToolBarBreak(Qt.BottomToolBarArea)

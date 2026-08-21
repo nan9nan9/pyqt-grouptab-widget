@@ -16,6 +16,9 @@
   Loading / Gear / 없음 — `registerIconType()` 로 **커스텀 타입 확장 가능**
 - ✅ **그룹 단위 전환**(`nextGroup`/`previousGroup`)과 **같은 그룹 내 탭 순환 전환**
   (`nextTabInGroup`/`previousTabInGroup`, 1→2→3→1) 지원
+- ✅ **전환 단축키 기본 제공** — `Ctrl+Tab` / `Ctrl+Shift+Tab` 은 (일반 탭 위젯처럼
+  탭 하나씩이 아니라) **그룹 단위**로, `F1` / `Shift+F1` 은 **같은 그룹 안에서**
+  탭을 순환 전환합니다. 조합 변경·on/off 가능
 - ✅ **탭별 툴팁**(마우스오버 설명) 지원 — `addGroupTab(..., tooltip="...")` 또는 `setTabToolTip(index, text)`
 - ✅ **닫기 버튼**(`setTabsClosable(True)`) 지원 — 라벨과 겹치지 않게 공간 자동 확보
 - ✅ 그룹에 탭 추가 시 해당 그룹 블록의 **마지막 순서**에 삽입
@@ -44,6 +47,7 @@ src/grouptab/          # 패키지
   __init__.py          # GroupTabBar, GroupTabWidget export
   grouptabbar.py
   grouptabwidget.py
+  shortcuts.py         # 전환 단축키(Ctrl+Tab / F1) 믹스인
   assets/              # 기본 제공 GIF (loading.gif, gear.gif)
 examples/
   basic_example.py     # 데모 앱
@@ -63,7 +67,8 @@ QT_API=pyside6 python examples/basic_example.py
 데모에는 그룹별 색 점 / 아이콘 없는 탭 / **애니메이션 GIF** / **진행(세모)**
 아이콘이 섞여 있고, "현재 탭 아이콘" 버튼(색 점 / Loading / Gear / 진행 / 없음)으로
 바로 바꿔볼 수 있습니다. **진행 색상 콤보**로 세모 아이콘 색을 바꿔볼 수 있고,
-그룹 전환 버튼(◀ 그룹 / 그룹 ▶)과 **같은 그룹 내 탭 이동 버튼**(◀ 탭 / 탭 ▶),
+그룹 전환 버튼(◀ 그룹 / 그룹 ▶)과 **같은 그룹 내 탭 이동 버튼**(◀ 탭 / 탭 ▶) —
+버튼 대신 **`Ctrl+Tab`(그룹 전환) / `F1`(그룹 내 탭 전환)** 단축키로도 확인할 수 있습니다 —,
 상단 액센트 바 토글, **그룹 모양 선택 콤보**(라운딩 / 왼쪽 색상 / 네이티브),
 **이동 애니메이션 토글**도 있습니다.
 
@@ -138,6 +143,39 @@ tabs.nextTabInGroup()      # 같은 그룹의 다음 탭 (마지막이면 첫 �
 tabs.previousTabInGroup()  # 같은 그룹의 이전 탭 (첫 탭이면 마지막으로)
 ```
 
+### 전환 단축키
+
+별도 설정 없이 아래 단축키가 기본으로 동작합니다. (`GroupTabWidget`,
+`GroupTabBar` 모두 동일)
+
+| 단축키 | 동작 |
+| --- | --- |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | 다음/이전 **그룹**으로 전환 (그 그룹에서 마지막으로 보던 탭으로 복귀) |
+| `F1` / `Shift+F1` | **같은 그룹 안에서** 다음/이전 탭으로 순환 (1→2→3→1) |
+
+일반 `QTabWidget` 의 `Ctrl+Tab` 은 탭을 하나씩 넘기지만, 그룹탭에서는 그룹
+단위로 넘어가도록 대체됩니다. (`QShortcut` 이 키 이벤트보다 먼저 처리되므로
+`QTabWidget` 의 기본 동작은 실행되지 않습니다.)
+
+```python
+# 켜고 끄기 (기본은 둘 다 켜짐)
+tabs.setGroupSwitchShortcutEnabled(False)   # Ctrl+Tab 그룹 전환 끄기
+tabs.setTabSwitchShortcutEnabled(False)     # F1 그룹 내 탭 전환 끄기
+
+# 조합 바꾸기 (문자열 또는 QKeySequence, None 이면 해당 방향 미등록)
+tabs.setGroupSwitchKeys("Ctrl+PgDown", "Ctrl+PgUp")
+tabs.setTabSwitchKeys("Alt+Right", "Alt+Left")
+
+# 동작 범위 — 기본은 이 위젯과 그 자식(페이지 안쪽 포함)에 포커스가 있을 때.
+# 창 전체에서 받으려면:
+from qtpy.QtCore import Qt
+tabs.setSwitchShortcutContext(Qt.WindowShortcut)
+```
+
+> `F1` 은 일부 앱에서 도움말 키로도 쓰이므로, 충돌하면
+> `setTabSwitchKeys(...)` 로 바꾸거나 `setTabSwitchShortcutEnabled(False)` 로
+> 끄고 원하는 곳에 직접 연결하세요.
+
 > **그룹 관리는 전용 API로만 하세요.** 그룹 무결성을 위해 탭 추가/삽입은
 > `addGroupTab()` / `insertGroupTab()` 로만 해야 합니다. 상속된
 > `addTab()` / `insertTab()` 을 직접 호출하면 그룹 태그가 없는 탭이 생겨 그룹
@@ -186,6 +224,11 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `setCurrentGroup(group)` | 해당 그룹으로 전환 (그룹별 마지막 탭, 없으면 첫 탭) |
 | `nextGroup()` / `previousGroup()` | 다음/이전 그룹으로 순환 전환 |
 | `nextTabInGroup()` / `previousTabInGroup()` | **같은 그룹 안에서** 다음/이전 탭으로 순환 전환 (1→2→3→1). 그룹 경계를 넘지 않으며, 탭이 1개거나 선택이 없으면 `False` 반환 |
+| `setGroupSwitchShortcutEnabled(bool)` / `groupSwitchShortcutEnabled()` | 그룹 전환 단축키(기본 `Ctrl+Tab` / `Ctrl+Shift+Tab`) on/off (기본 on) |
+| `setTabSwitchShortcutEnabled(bool)` / `tabSwitchShortcutEnabled()` | 그룹 내 탭 전환 단축키(기본 `F1` / `Shift+F1`) on/off (기본 on) |
+| `setGroupSwitchKeys(next, prev)` / `groupSwitchKeys()` | 그룹 전환 단축키 조합 변경/조회 (문자열 또는 `QKeySequence`, `None` 이면 미등록) |
+| `setTabSwitchKeys(next, prev)` / `tabSwitchKeys()` | 그룹 내 탭 전환 단축키 조합 변경/조회 |
+| `setSwitchShortcutContext(context)` / `switchShortcutContext()` | 단축키 동작 범위 (기본 `Qt.WidgetWithChildrenShortcut`, 창 전체는 `Qt.WindowShortcut`) |
 | `setGroupStyle(style)` / `groupStyle()` | 그룹 모양: `STYLE_ROUNDED` / `STYLE_LEFT_COLOR` / `STYLE_PLAIN` |
 | `setGroupColor(group, color)` | `STYLE_LEFT_COLOR` 에서 그룹별 마커 색 지정 (None 이면 기본색 순환) |
 | `setGroupMoveAnimationEnabled(bool)` / `groupMoveAnimationEnabled()` | 그룹 이동 슬라이드 애니메이션 on/off (기본 on) |
@@ -218,6 +261,7 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `groupOrder()` | 현재 표시 순서대로의 그룹 목록 |
 | `addTab()` / `insertTab()` | ⛔ **막힘**(`RuntimeError`) — `addGroupTab`/`insertGroupTab` 사용 |
 | `setGroupStyle` / `setGroupColor` / `setGroupMoveAnimationEnabled` / `setGroupCornerRadius` | 모양·색·애니메이션·모서리 반경 설정 (`GroupTabWidget` 과 동일) |
+| `setGroupSwitchShortcutEnabled` / `setTabSwitchShortcutEnabled` / `setGroupSwitchKeys` / `setTabSwitchKeys` / `setSwitchShortcutContext` | 전환 단축키 설정 (`GroupTabWidget` 과 동일) |
 
 ### 시그널
 
@@ -227,8 +271,11 @@ tabbar.removeGroup(1)           # 그룹 1 의 모든 탭 제거
 | `currentGroupChanged(group)` | 선택된 탭의 그룹이 바뀌었을 때 방출 |
 
 > 위 그룹 전환 API(`currentGroup` / `setCurrentGroup` / `nextGroup` /
-> `previousGroup` / `nextTabInGroup` / `previousTabInGroup`)와
-> `currentGroupChanged` 시그널은 `GroupTabBar` 에도 동일하게 있습니다.
+> `previousGroup` / `nextTabInGroup` / `previousTabInGroup`)와 전환 단축키
+> 설정, `currentGroupChanged` 시그널은 `GroupTabBar` 에도 동일하게 있습니다.
+> 단, `GroupTabWidget` 안에서는 탭 위젯 쪽 단축키만 켜 두고 내부 탭 바의
+> 단축키는 꺼 둡니다. (같은 키가 두 번 잡히면 Qt 가 ambiguous shortcut 으로
+> 무시하기 때문입니다)
 
 ## 동작 방식
 

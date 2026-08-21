@@ -13,7 +13,8 @@ import pytest
 
 from qtpy.QtCore import Qt, QEvent, QPoint
 from qtpy.QtGui import QMouseEvent
-from qtpy.QtWidgets import QLabel
+from qtpy.QtTest import QTest
+from qtpy.QtWidgets import QApplication, QLabel
 
 from grouptab.grouptabbar import GroupTabBar
 from grouptab.grouptabwidget import GroupTabWidget
@@ -527,3 +528,141 @@ def test_per_tab_close_via_widget(qapp):
     w.setTabCloseButtonVisible(1, False)
     assert w.isTabCloseButtonVisible(0)
     assert not w.isTabCloseButtonVisible(1)
+
+
+# ------------------------------------------------------------------ #
+# 전환 단축키 (Ctrl+Tab = 그룹 전환 / F1 = 그룹 내 탭 전환)
+# ------------------------------------------------------------------ #
+def _activate(widget, qapp):
+    """단축키가 동작하도록 위젯을 띄우고 활성 창으로 만든다."""
+    widget.show()
+    qapp.processEvents()
+    QApplication.setActiveWindow(widget)
+    widget.activateWindow()
+    widget.setFocus()
+    qapp.processEvents()
+
+
+def _key(qapp, target, key, mod=Qt.NoModifier):
+    QTest.keyClick(target, key, mod)
+    qapp.processEvents()
+
+
+def test_shortcut_group_switch_on_widget(qapp):
+    """GroupTabWidget: Ctrl+Tab 은 탭이 아니라 그룹 단위로 넘어간다."""
+    w = GroupTabWidget()
+    for group in (1, 2, 3):
+        for k in range(3):
+            w.addGroupTab(QLabel("%d-%d" % (group, k)), "%d-%d" % (group, k), group)
+    _activate(w, qapp)
+
+    w.setCurrentIndex(0)
+    # 다음 그룹: 인접 탭(1)이 아니라 그룹 2 의 첫 탭(3)으로 간다.
+    _key(qapp, w, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 2
+    assert w.currentIndex() == 3
+    _key(qapp, w, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 3
+    # 마지막 그룹에서 한 번 더 누르면 처음 그룹으로 순환한다.
+    _key(qapp, w, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 1
+
+    # 역방향(Ctrl+Shift+Tab): 바인딩에 따라 Backtab 으로 들어와도 동작한다.
+    _key(qapp, w, Qt.Key_Backtab, Qt.ControlModifier | Qt.ShiftModifier)
+    assert w.currentGroup() == 3
+
+
+def test_shortcut_tab_switch_in_group(qapp):
+    """F1 / Shift+F1 은 같은 그룹 안에서만 탭을 순환한다."""
+    w = GroupTabWidget()
+    for group in (1, 2):
+        for k in range(3):
+            w.addGroupTab(QLabel("%d-%d" % (group, k)), "%d-%d" % (group, k), group)
+    _activate(w, qapp)
+
+    w.setCurrentIndex(0)
+    for expected in (1, 2, 0):          # 1→2→3→1 순환
+        _key(qapp, w, Qt.Key_F1)
+        assert w.currentIndex() == expected
+        assert w.currentGroup() == 1    # 그룹 경계를 넘지 않는다
+
+    _key(qapp, w, Qt.Key_F1, Qt.ShiftModifier)
+    assert w.currentIndex() == 2
+
+
+def test_shortcut_group_switch_from_page_child(qapp):
+    """페이지 안쪽 위젯에 포커스가 있어도 단축키가 동작한다."""
+    w = GroupTabWidget()
+    for group in (1, 2):
+        page = QLabel("page %d" % group)
+        page.setFocusPolicy(Qt.StrongFocus)
+        w.addGroupTab(page, "t%d" % group, group)
+    _activate(w, qapp)
+
+    w.setCurrentIndex(0)
+    page = w.currentWidget()
+    page.setFocus()
+    qapp.processEvents()
+    _key(qapp, page, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 2
+
+
+def test_shortcut_on_bar_and_toggle(qapp):
+    """GroupTabBar 단독 사용에서도 동작하고, 끄면 동작하지 않는다."""
+    bar = make_bar([("A", 2), ("B", 2)])
+    _activate(bar, qapp)
+
+    bar.setCurrentIndex(0)
+    assert bar.groupSwitchShortcutEnabled() is True
+    _key(qapp, bar, Qt.Key_Tab, Qt.ControlModifier)
+    assert bar.currentIndex() == 2       # 그룹 B 첫 탭
+    _key(qapp, bar, Qt.Key_F1)
+    assert bar.currentIndex() == 3       # 그룹 B 안에서 다음 탭
+
+    # 끄면 반응하지 않는다.
+    bar.setGroupSwitchShortcutEnabled(False)
+    bar.setTabSwitchShortcutEnabled(False)
+    _key(qapp, bar, Qt.Key_Tab, Qt.ControlModifier)
+    _key(qapp, bar, Qt.Key_F1)
+    assert bar.currentIndex() == 3
+
+
+def test_shortcut_custom_keys(qapp):
+    """단축키 조합을 바꿀 수 있다."""
+    bar = make_bar([("A", 2), ("B", 2)])
+    bar.setGroupSwitchKeys("Ctrl+PgDown", "Ctrl+PgUp")
+    bar.setTabSwitchKeys("F2", "Shift+F2")
+    _activate(bar, qapp)
+
+    bar.setCurrentIndex(0)
+    _key(qapp, bar, Qt.Key_Tab, Qt.ControlModifier)   # 이전 조합은 무효
+    assert bar.currentIndex() == 0
+    _key(qapp, bar, Qt.Key_PageDown, Qt.ControlModifier)
+    assert bar.currentIndex() == 2
+    _key(qapp, bar, Qt.Key_F2)
+    assert bar.currentIndex() == 3
+    _key(qapp, bar, Qt.Key_PageUp, Qt.ControlModifier)
+    assert bar.currentIndex() == 0
+    assert bar.groupSwitchKeys() == ("Ctrl+PgDown", "Ctrl+PgUp")
+    assert bar.tabSwitchKeys() == ("F2", "Shift+F2")
+
+
+def test_widget_does_not_duplicate_bar_shortcuts(qapp):
+    """탭 위젯이 단축키를 맡고, 내부 탭 바의 단축키는 꺼져 있다.
+
+    (둘 다 켜져 있으면 탭 바 포커스에서 ambiguous shortcut 이 되어 무시된다)
+    """
+    w = GroupTabWidget()
+    for group in (1, 2):
+        w.addGroupTab(QLabel("p%d" % group), "t%d" % group, group)
+    bar = w.groupTabBar()
+    assert bar.groupSwitchShortcutEnabled() is False
+    assert bar.tabSwitchShortcutEnabled() is False
+    assert w.groupSwitchShortcutEnabled() is True
+
+    _activate(w, qapp)
+    w.setCurrentIndex(0)
+    bar.setFocus()
+    qapp.processEvents()
+    _key(qapp, bar, Qt.Key_Tab, Qt.ControlModifier)
+    assert w.currentGroup() == 2

@@ -21,9 +21,10 @@ PyQt5 / PyQt6 / PySide2 / PySide6 모두 호환된다. (qtpy 사용)
 from qtpy.QtWidgets import QTabWidget
 
 from .grouptabbar import GroupTabBar
+from .shortcuts import SwitchShortcutMixin
 
 
-class GroupTabWidget(QTabWidget):
+class GroupTabWidget(SwitchShortcutMixin, QTabWidget):
     """그룹 단위로 동작하는 QTabWidget.
 
     Signals:
@@ -57,6 +58,16 @@ class GroupTabWidget(QTabWidget):
         # 닫기 X 는 우리가 직접 그리므로, 바의 tabCloseRequested 를
         # QTabWidget 의 동일 시그널로 직접 포워딩한다.
         self._bar.tabCloseRequested.connect(self.tabCloseRequested)
+
+        # 그룹/탭 전환 단축키는 탭 위젯 쪽에서만 등록한다.
+        # (탭 바에도 같은 단축키가 남아 있으면 탭 바에 포커스가 있을 때
+        #  같은 키가 두 번 잡혀 Qt 가 "ambiguous shortcut" 으로 무시한다.)
+        self._bar.setGroupSwitchShortcutEnabled(False)
+        self._bar.setTabSwitchShortcutEnabled(False)
+        # Ctrl+Tab / Ctrl+Shift+Tab -> 다음/이전 그룹 (QTabWidget 기본
+        # 동작인 "다음 탭" 대신 그룹 단위로 넘어간다)
+        # F1 / Shift+F1             -> 같은 그룹 안에서 다음/이전 탭
+        self._init_switch_shortcuts()
 
     # ------------------------------------------------------------------ #
     # 공개 API

@@ -35,6 +35,8 @@ from qtpy.QtWidgets import (
     QStyle,
 )
 
+from .shortcuts import SwitchShortcutMixin
+
 
 # 기본 제공 GIF 아이콘이 있는 디렉토리 (패키지 내 assets/)
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -51,7 +53,7 @@ def _event_pos(event):
     return event.pos()
 
 
-class GroupTabBar(QTabBar):
+class GroupTabBar(SwitchShortcutMixin, QTabBar):
     """그룹 단위로 동작하는 QTabBar.
 
     Signals:
@@ -179,6 +181,11 @@ class GroupTabBar(QTabBar):
         self.setExpanding(False)
         # 닫기 X hover 효과를 위해 마우스 추적을 켠다.
         self.setMouseTracking(True)
+
+        # 그룹/탭 전환 단축키 등록.
+        # Ctrl+Tab / Ctrl+Shift+Tab -> 다음/이전 그룹
+        # F1 / Shift+F1             -> 같은 그룹 안에서 다음/이전 탭
+        self._init_switch_shortcuts()
 
     # ------------------------------------------------------------------ #
     # 공개 API
